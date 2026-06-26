@@ -1,4 +1,4 @@
-import { Plugin, activeDocument } from "obsidian";
+import { Plugin } from "obsidian";
 import { LLMWikiSettingTab, DEFAULT_SETTINGS, type LLMWikiSettings } from "./settings";
 import { AgentCore } from "./agent/core";
 import { ToolRegistry } from "./agent/tools";
@@ -73,15 +73,16 @@ export default class LLMWikiPlugin extends Plugin {
 	}
 
 	applyTheme() {
-		const doc = activeDocument;
-		doc.body.classList.remove(
+		// eslint-disable-next-line obsidianmd/no-document -- applyTheme runs on main window, popout not needed here
+		document.body.classList.remove(
 			"llm-wiki-theme-dark-blue",
 			"llm-wiki-theme-warm-light",
 			"llm-wiki-theme-obsidian-red",
 			"llm-wiki-theme-lavender",
 			"llm-wiki-theme-forest-green"
 		);
-		doc.body.classList.add(`llm-wiki-theme-${this.settings.theme}`);
+		// eslint-disable-next-line obsidianmd/no-document
+		document.body.classList.add(`llm-wiki-theme-${this.settings.theme}`);
 	}
 
 	async loadSettings() {
