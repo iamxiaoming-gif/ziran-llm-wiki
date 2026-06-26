@@ -6,11 +6,34 @@ Build deep topic knowledge bases through conversational AI, based on Karpathy's 
 
 ## Features
 
-- **Conversational knowledge ingestion** — talk to AI, build your wiki naturally
-- **Automatic knowledge extraction** — atomic knowledge points extracted and linked
-- **Multi-topic management** — organize knowledge across subjects
-- **Memory & context** — AI remembers your conversations and knowledge structure
-- **Customizable models** — supports OpenAI compatible API (GPT-4o, DeepSeek, etc.)
+- **Conversational knowledge ingestion** — chat with AI to ingest raw materials and extract atomic knowledge points automatically
+- **Structured knowledge base** — auto-creates topic directories with index pages, knowledge pages, organization profiles, and changelogs
+- **Three core workflows** — Ingest (process raw materials), Query (search knowledge), Lint (quality check & maintenance)
+- **Smart indexing** — automatically updates cross-references and index pages when new knowledge is created
+- **Memory & context** — AI retains long-term memory, user preferences, and work logs across sessions
+- **Conflict tracking** — detects and records knowledge conflicts instead of overwriting existing content
+- **Multiple themes** — Dark Blue, Warm Light, Obsidian Red, Lavender, Forest Green
+- **Streaming output** — real-time AI response with tool call visualization
+- **OpenAI compatible** — supports GPT-4o, DeepSeek, SiliconFlow, and any OpenAI-compatible API
+
+## Quick Start
+
+1. Configure your **API Key** and **API Base URL** in plugin settings
+2. Click the 💬 ribbon icon or run "Open LLM Wiki" command
+3. Try these commands in the chat:
+   - **"初始化知识库"** — create a topic knowledge base directory structure
+   - **"摄取资料"** — ingest raw material files into structured knowledge
+   - **"查询知识"** — search your knowledge base
+   - **"Lint 检查"** — run quality checks on your knowledge base
+   - **"知识库状态"** — view knowledge base overview
+
+## Safety Rules
+
+The plugin enforces strict safety rules to protect your knowledge:
+- **Read-only raw materials** — original files are never modified or deleted
+- **Atomic knowledge points** — each concept gets its own page
+- **No deletion** — existing content can only be appended, never overwritten or removed
+- **Conflict recording** — contradictions are logged, not silently resolved
 
 ## Installation
 
@@ -26,12 +49,6 @@ Build deep topic knowledge bases through conversational AI, based on Karpathy's 
 npm install
 npm run build
 ```
-
-## Usage
-
-1. Configure API Key and model in plugin settings
-2. Click the ribbon icon or run command to open chat panel
-3. Start a conversation — the AI will help you build your knowledge base
 
 ## Follow
 
