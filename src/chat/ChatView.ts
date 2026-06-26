@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, MarkdownRenderer, normalizePath, TFile, setCssStyles } from "obsidian";
+import { ItemView, WorkspaceLeaf, MarkdownRenderer, normalizePath, TFile } from "obsidian";
 import type LLMWikiPlugin from "../main";
 import type { ToolResult } from "../agent/tools";
 
@@ -49,11 +49,6 @@ export class ChatView extends ItemView {
 	}
 
 	private buildUI(container: HTMLElement) {
-		setCssStyles(container, {
-			display: "flex",
-			flexDirection: "column",
-			height: "100%",
-		});
 
 		const chatHeader = container.createEl("div", { cls: "llm-wiki-chat-header" });
 		chatHeader.createEl("h3", { text: "💬 LLM Wiki 知识库助手" });
