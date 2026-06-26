@@ -1,0 +1,9 @@
+{
+  "id": "ziran-llm-wiki",
+  "name": "Ziran LLM Wiki",
+  "version": "0.1.0",
+  "minAppVersion": "1.0.0",
+  "description": "基于 Karpathy LLM Wiki 方法论，通过对话驱动构建深度专题知识库",
+  "author": "iamxiaoming-gif",
+  "isDesktopOnly": true
+}

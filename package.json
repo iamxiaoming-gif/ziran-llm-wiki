@@ -1,0 +1,21 @@
+{
+  "name": "ziran-llm-wiki",
+  "version": "0.1.0",
+  "description": "基于 Karpathy LLM Wiki 方法论，通过对话驱动构建深度专题知识库",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "node esbuild.config.mjs production"
+  },
+  "keywords": ["obsidian", "plugin", "llm", "wiki", "knowledge-base"],
+  "author": "iamxiaoming-gif",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^16.11.6",
+    "builtin-modules": "^3.3.0",
+    "esbuild": "^0.17.3",
+    "obsidian": "latest",
+    "tslib": "2.4.0",
+    "typescript": "4.7.4"
+  }
+}
