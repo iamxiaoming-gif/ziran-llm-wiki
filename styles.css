@@ -178,23 +178,23 @@
 	background: var(--bg-secondary);
 }
 
-.llm-wiki-input {
+.llm-wiki-root .llm-wiki-input {
 	width: 100%;
-	background: var(--bg-primary) !important;
-	color: var(--text-primary) !important;
-	border: 1px solid var(--border) !important;
+	background: var(--bg-primary);
+	color: var(--text-primary);
+	border: 1px solid var(--border);
 	border-radius: var(--radius);
 	padding: 10px 12px;
 	font-size: var(--font-size);
 	resize: none;
 	font-family: inherit;
-	caret-color: var(--accent) !important;
+	caret-color: var(--accent);
 	box-sizing: border-box;
 }
 
-.llm-wiki-input:focus {
+.llm-wiki-root .llm-wiki-input:focus {
 	outline: none;
-	border-color: var(--accent) !important;
+	border-color: var(--accent);
 }
 
 .llm-wiki-input::placeholder {
@@ -260,6 +260,10 @@
 .llm-wiki-btn-danger {
 	background: var(--danger);
 	color: #fff;
+}
+
+.llm-wiki-hidden {
+	display: none !important;
 }
 
 .llm-wiki-tool-card {

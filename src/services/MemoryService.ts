@@ -21,7 +21,7 @@ export class MemoryService {
 			if (file && file instanceof TFile) {
 				return await this.app.vault.read(file);
 			}
-		} catch {}
+		} catch { /* ignore */ }
 		return "";
 	}
 
@@ -39,7 +39,7 @@ export class MemoryService {
 				}
 			}
 			return parts.join("\n\n---\n\n");
-		} catch {}
+		} catch { /* ignore */ }
 		return "";
 	}
 

@@ -1,4 +1,4 @@
-import { App, normalizePath, TFile, TFolder, MetadataCache, Vault } from "obsidian";
+import { App, normalizePath, TFile, TFolder } from "obsidian";
 import type { LLMWikiSettings } from "../settings";
 
 export interface ToolDefinition {
@@ -360,7 +360,7 @@ export class ToolRegistry {
 							.replace(/YYYY-MM-DD/g, new Date().toISOString().split("T")[0])
 							.replace(/\[方括号\]/g, "");
 					}
-				} catch {}
+				} catch { /* ignore */ }
 				await this.createFileOnly(`${basePath}/AGENTS.md`, agentsContent);
 
 					return {
@@ -1489,9 +1489,9 @@ export class ToolRegistry {
 		});
 	}
 
-	getToolDefinitions(): any[] {
-		const definitions: any[] = [];
-		for (const [name, tool] of this.tools) {
+	getToolDefinitions(): ToolDefinition[] {
+		const definitions: ToolDefinition[] = [];
+		for (const [, tool] of this.tools) {
 			definitions.push({
 				type: "function",
 				function: {

@@ -1,8 +1,14 @@
 import esbuild from "esbuild";
 import process from "process";
-import builtins from "builtin-modules";
 
 const prod = process.argv[2] === "production";
+
+const builtins = [
+  "assert", "buffer", "child_process", "crypto", "events",
+  "fs", "http", "https", "net", "os", "path", "process",
+  "querystring", "stream", "string_decoder", "timers",
+  "tls", "tty", "url", "util", "zlib",
+];
 
 esbuild
   .build({

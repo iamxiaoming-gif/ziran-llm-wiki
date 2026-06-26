@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, MarkdownRenderer, normalizePath, TFile } from "obsidian";
+import { ItemView, WorkspaceLeaf, MarkdownRenderer, normalizePath, TFile, setCssStyles } from "obsidian";
 import type LLMWikiPlugin from "../main";
 import type { ToolResult } from "../agent/tools";
 
@@ -45,20 +45,22 @@ export class ChatView extends ItemView {
 	}
 
 	onClose() {
-		this.saveChatHistory();
+		void this.saveChatHistory();
 	}
 
 	private buildUI(container: HTMLElement) {
-		container.style.display = "flex";
-		container.style.flexDirection = "column";
-		container.style.height = "100%";
+		setCssStyles(container, {
+			display: "flex",
+			flexDirection: "column",
+			height: "100%",
+		});
 
 		const chatHeader = container.createEl("div", { cls: "llm-wiki-chat-header" });
 		chatHeader.createEl("h3", { text: "💬 LLM Wiki 知识库助手" });
 
 		const headerActions = chatHeader.createEl("div", { cls: "llm-wiki-header-actions" });
 		const newBtn = headerActions.createEl("button", { text: "新对话", cls: "llm-wiki-btn" });
-		newBtn.addEventListener("click", () => this.newConversation());
+		newBtn.addEventListener("click", () => void this.newConversation());
 
 		this.messagesEl = container.createEl("div", { cls: "llm-wiki-messages" });
 
@@ -75,7 +77,7 @@ export class ChatView extends ItemView {
 		this.inputEl.addEventListener("keydown", (e) => {
 			if (e.key === "Enter" && !e.shiftKey) {
 				e.preventDefault();
-				this.sendMessage();
+				void this.sendMessage();
 			}
 		});
 
@@ -98,13 +100,13 @@ export class ChatView extends ItemView {
 		const btnRow = inputContainer.createEl("div", { cls: "llm-wiki-btn-row" });
 
 		this.sendBtn = btnRow.createEl("button", { text: "发送", cls: "llm-wiki-btn llm-wiki-btn-primary" });
-		this.sendBtn.addEventListener("click", () => this.sendMessage());
+		this.sendBtn.addEventListener("click", () => void this.sendMessage());
 
 		this.stopBtn = btnRow.createEl("button", {
 			text: "停止",
 			cls: "llm-wiki-btn llm-wiki-btn-danger",
 		});
-		this.stopBtn.style.display = "none";
+		this.stopBtn.addClass("llm-wiki-hidden");
 		this.stopBtn.addEventListener("click", () => this.stopGeneration());
 	}
 
@@ -123,8 +125,8 @@ export class ChatView extends ItemView {
 
 		this.inputEl.value = "";
 		this.isProcessing = true;
-		this.sendBtn.style.display = "none";
-		this.stopBtn.style.display = "inline-block";
+		this.sendBtn.addClass("llm-wiki-hidden");
+		this.stopBtn.removeClass("llm-wiki-hidden");
 
 		this.addUserMessage(text);
 		this.addAssistantMessage("");
@@ -165,12 +167,12 @@ export class ChatView extends ItemView {
 						},
 					});
 				}
-		} catch (e: any) {
-			this.updateAssistantMessage(`❌ 发生错误: ${e.message}`);
+		} catch (e: unknown) {
+			this.updateAssistantMessage(`❌ 发生错误: ${e instanceof Error ? e.message : String(e)}`);
 		} finally {
 			this.isProcessing = false;
-			this.sendBtn.style.display = "inline-block";
-			this.stopBtn.style.display = "none";
+			this.sendBtn.removeClass("llm-wiki-hidden");
+			this.stopBtn.addClass("llm-wiki-hidden");
 			this.toolCardEl = null;
 			this.inputEl.focus();
 		}
@@ -179,22 +181,22 @@ export class ChatView extends ItemView {
 	private stopGeneration() {
 		this.plugin.agentCore?.abort();
 		this.isProcessing = false;
-		this.sendBtn.style.display = "inline-block";
-		this.stopBtn.style.display = "none";
+		this.sendBtn.removeClass("llm-wiki-hidden");
+		this.stopBtn.addClass("llm-wiki-hidden");
 	}
 
 	private async addUserMessage(text: string) {
 		const msgDiv = this.messagesEl.createEl("div", { cls: "llm-wiki-message llm-wiki-user-message" });
 		msgDiv.createEl("div", { cls: "llm-wiki-message-sender", text: "你" });
 		const contentDiv = msgDiv.createEl("div", { cls: "llm-wiki-message-content" });
-		await MarkdownRenderer.renderMarkdown(text, contentDiv, "", this.plugin);
+		await MarkdownRenderer.render(this.app, text, contentDiv, "", this.plugin);
 		this.scrollToBottom();
 	}
 
 	private addSystemMessage(text: string) {
 		const msgDiv = this.messagesEl.createEl("div", { cls: "llm-wiki-message llm-wiki-system-message" });
 		const contentDiv = msgDiv.createEl("div", { cls: "llm-wiki-message-content" });
-		MarkdownRenderer.renderMarkdown(text, contentDiv, "", this.plugin);
+		void MarkdownRenderer.render(this.app, text, contentDiv, "", this.plugin);
 	}
 
 	private addAssistantMessage(text: string) {
@@ -209,7 +211,7 @@ export class ChatView extends ItemView {
 		if (this.currentAssistantEl) {
 			this.currentContent = text;
 			this.currentAssistantEl.empty();
-			MarkdownRenderer.renderMarkdown(text, this.currentAssistantEl, "", this.plugin);
+			void MarkdownRenderer.render(this.app, text, this.currentAssistantEl, "", this.plugin);
 			this.scrollToBottom();
 		}
 	}
@@ -218,19 +220,19 @@ export class ChatView extends ItemView {
 		this.currentContent += token;
 		this.tokenBuffer += token;
 		if (!this.renderTimer) {
-			this.renderTimer = setInterval(() => this.flushTokenBuffer(), 50);
+			this.renderTimer = window.setInterval(() => this.flushTokenBuffer(), 50);
 		}
 		this.scrollToBottom();
 	}
 
 	flushTokenBuffer() {
 		if (this.renderTimer) {
-			clearInterval(this.renderTimer);
+			window.clearInterval(this.renderTimer);
 			this.renderTimer = null;
 		}
 		if (this.tokenBuffer && this.currentAssistantEl) {
 			this.currentAssistantEl.empty();
-			MarkdownRenderer.renderMarkdown(this.currentContent, this.currentAssistantEl, "", this.plugin);
+			void MarkdownRenderer.render(this.app, this.currentContent, this.currentAssistantEl, "", this.plugin);
 			this.tokenBuffer = "";
 		}
 	}
@@ -282,8 +284,7 @@ export class ChatView extends ItemView {
 			const title = userMessage.length > 50 ? userMessage.substring(0, 50) + "..." : userMessage;
 			const summary = assistantReply.length > 200 ? assistantReply.substring(0, 200) + "..." : assistantReply;
 			await this.plugin.memoryService.writeLog(title, `用户: ${userMessage}`, summary);
-		} catch {
-		}
+		} catch { /* ignore */ }
 	}
 
 	private async saveChatHistory() {
@@ -298,8 +299,7 @@ export class ChatView extends ItemView {
 			} else {
 				await this.app.vault.create(path, JSON.stringify(data, null, 2));
 			}
-		} catch {
-		}
+		} catch { /* ignore */ }
 	}
 
 	private async loadChatHistory() {

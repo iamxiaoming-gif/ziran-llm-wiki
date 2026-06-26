@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, Setting } from "obsidian";
+import { App, PluginSettingTab, Setting, debounce } from "obsidian";
 import type LLMWikiPlugin from "./main";
 
 export interface LLMWikiSettings {
@@ -29,17 +29,6 @@ export const DEFAULT_SETTINGS: LLMWikiSettings = {
 	streamMode: true,
 };
 
-export function debounce<T extends (...args: any[]) => any>(
-	fn: T,
-	ms: number
-): T {
-	let timer: ReturnType<typeof setTimeout> | null = null;
-	return ((...args: any[]) => {
-		if (timer) clearTimeout(timer);
-		timer = setTimeout(() => fn(...args), ms);
-	}) as T;
-}
-
 export class LLMWikiSettingTab extends PluginSettingTab {
 	plugin: LLMWikiPlugin;
 	debouncedSave: () => void;
@@ -47,16 +36,19 @@ export class LLMWikiSettingTab extends PluginSettingTab {
 	constructor(app: App, plugin: LLMWikiPlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
-		this.debouncedSave = debounce(async () => {
-			await this.plugin.saveSettings();
-		}, 500);
+		const _debounced = debounce(
+			async () => { await this.plugin.saveSettings(); },
+			500,
+			true
+		);
+		this.debouncedSave = () => { void _debounced(); };
 	}
 
 	display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		containerEl.createEl("h2", { text: "LLM Wiki 知识库助手设置" });
+		new Setting(containerEl).setName("LLM Wiki 知识库助手设置").setHeading();
 
 		new Setting(containerEl)
 			.setName("API Key")
@@ -164,7 +156,6 @@ export class LLMWikiSettingTab extends PluginSettingTab {
 				slider
 					.setLimits(0, 2, 0.1)
 					.setValue(this.plugin.settings.temperature)
-					.setDynamicTooltip()
 					.onChange(async (value) => {
 						this.plugin.settings.temperature = value;
 						this.debouncedSave();
@@ -178,7 +169,6 @@ export class LLMWikiSettingTab extends PluginSettingTab {
 				slider
 					.setLimits(1, 30, 1)
 					.setValue(this.plugin.settings.maxIterations)
-					.setDynamicTooltip()
 					.onChange(async (value) => {
 						this.plugin.settings.maxIterations = value;
 						this.debouncedSave();

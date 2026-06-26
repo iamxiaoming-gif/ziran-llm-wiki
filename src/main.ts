@@ -1,4 +1,4 @@
-import { Plugin } from "obsidian";
+import { Plugin, activeDocument } from "obsidian";
 import { LLMWikiSettingTab, DEFAULT_SETTINGS, type LLMWikiSettings } from "./settings";
 import { AgentCore } from "./agent/core";
 import { ToolRegistry } from "./agent/tools";
@@ -32,18 +32,17 @@ export default class LLMWikiPlugin extends Plugin {
 		});
 
 		this.addRibbonIcon("message-square", "LLM Wiki 知识库助手", () => {
-			this.activateChatView();
+			void this.activateChatView();
 		});
 
 		this.applyTheme();
 
 		this.app.workspace.onLayoutReady(() => {
-			this.activateChatView();
+			void this.activateChatView();
 		});
 	}
 
 	onunload() {
-		this.app.workspace.detachLeavesOfType(VIEW_TYPE_CHAT);
 	}
 
 	async initAgent() {
@@ -74,14 +73,15 @@ export default class LLMWikiPlugin extends Plugin {
 	}
 
 	applyTheme() {
-		document.body.classList.remove(
+		const doc = activeDocument;
+		doc.body.classList.remove(
 			"llm-wiki-theme-dark-blue",
 			"llm-wiki-theme-warm-light",
 			"llm-wiki-theme-obsidian-red",
 			"llm-wiki-theme-lavender",
 			"llm-wiki-theme-forest-green"
 		);
-		document.body.classList.add(`llm-wiki-theme-${this.settings.theme}`);
+		doc.body.classList.add(`llm-wiki-theme-${this.settings.theme}`);
 	}
 
 	async loadSettings() {

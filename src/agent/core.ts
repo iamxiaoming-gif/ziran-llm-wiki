@@ -118,12 +118,12 @@ export class AgentCore {
 						name: toolCall.function.name,
 					});
 				}
-			} catch (e: any) {
-				if (e.name === "AbortError") {
+			} catch (e: unknown) {
+				if (e instanceof Error && e.name === "AbortError") {
 					callbacks.onComplete(fullContent);
 					return;
 				}
-				const errorMsg = `请求失败: ${e.message}`;
+				const errorMsg = `请求失败: ${e instanceof Error ? e.message : String(e)}`;
 				this.history.push({ role: "assistant", content: errorMsg });
 				callbacks.onError(errorMsg);
 				return;
@@ -157,6 +157,7 @@ export class AgentCore {
 
 		this.abortController = new AbortController();
 
+		// eslint-disable-next-line obsidianmd/no-fetch -- fetch needed for SSE streaming, requestUrl doesn't support it
 		const response = await fetch(url, {
 			method: "POST",
 			headers: {
@@ -346,11 +347,11 @@ export class AgentCore {
 					content: msg.content || "",
 					toolCalls: msg.tool_calls || [],
 				};
-			} catch (e: any) {
-				const status = e?.status || 0;
+			} catch (e: unknown) {
+				const status = (e as Record<string, number>)?.status || 0;
 				if (status >= 400 && status < 500) throw e;
 				if (attempt < maxRetries) {
-					await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+					await new Promise((r) => window.setTimeout(r, 1000 * (attempt + 1)));
 				} else {
 					throw e;
 				}
