@@ -262,8 +262,8 @@
 	color: #fff;
 }
 
-.llm-wiki-hidden {
-	display: none !important;
+.llm-wiki-root .llm-wiki-hidden.llm-wiki-hidden {
+	display: none;
 }
 
 .llm-wiki-tool-card {
