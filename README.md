@@ -1,36 +1,42 @@
 # Ziran LLM Wiki
 
-基于 Karpathy LLM Wiki 方法论，通过对话驱动构建深度专题知识库的 Obsidian 插件。
+Build deep topic knowledge bases through conversational AI, based on Karpathy's LLM Wiki methodology. Like tending a digital garden, your wiki grows naturally through dialogue.
 
-## 功能
+基于 Karpathy LLM Wiki 方法论，通过对话驱动构建深度专题知识库。
 
-- 对话驱动的知识库构建
-- 自动提取知识点
-- 知识库索引管理
-- 多主题支持
-- 记忆管理
+## Features
 
-## 安装
+- **Conversational knowledge ingestion** — talk to AI, build your wiki naturally
+- **Automatic knowledge extraction** — atomic knowledge points extracted and linked
+- **Multi-topic management** — organize knowledge across subjects
+- **Memory & context** — AI remembers your conversations and knowledge structure
+- **Customizable models** — supports OpenAI compatible API (GPT-4o, DeepSeek, etc.)
 
-### 从 Releases 安装
+## Installation
 
-1. 从 [Releases](https://github.com/iamxiaoming-gif/ziran-llm-wiki/releases) 下载最新版本的 `main.js`、`manifest.json`、`styles.css`
-2. 将这三个文件复制到你的 Obsidian 库目录下的 `.obsidian/plugins/ziran-llm-wiki/` 文件夹
-3. 在 Obsidian 设置中启用插件
+### From Releases
 
-### 从源码构建
+1. Download `main.js`, `manifest.json`, `styles.css` from [Releases](https://github.com/iamxiaoming-gif/ziran-llm-wiki/releases)
+2. Copy them to `<vault>/.obsidian/plugins/ziran-llm-wiki/`
+3. Enable the plugin in Obsidian settings
+
+### From source
 
 ```bash
 npm install
 npm run build
 ```
 
-## 使用方法
+## Usage
 
-1. 在设置中配置 API Key 和模型参数
-2. 点击左侧 Ribbon 图标或执行命令打开对话面板
-3. 通过对话驱动构建你的知识库
+1. Configure API Key and model in plugin settings
+2. Click the ribbon icon or run command to open chat panel
+3. Start a conversation — the AI will help you build your knowledge base
 
-## 许可证
+## Follow
+
+关注微信公众号 **自然成长笔记**，获取更多关于知识管理的思考与实践。
+
+## License
 
 MIT

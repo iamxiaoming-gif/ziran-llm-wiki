@@ -3,7 +3,7 @@
   "name": "Ziran LLM Wiki",
   "version": "0.1.0",
   "minAppVersion": "1.0.0",
-  "description": "基于 Karpathy LLM Wiki 方法论，通过对话驱动构建深度专题知识库",
+  "description": "Build deep topic knowledge bases through conversational AI, based on Karpathy's LLM Wiki methodology.",
   "author": "iamxiaoming-gif",
   "isDesktopOnly": true
 }
