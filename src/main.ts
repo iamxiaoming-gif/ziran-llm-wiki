@@ -97,7 +97,7 @@ export default class LLMWikiPlugin extends Plugin {
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<LLMWikiSettings>);
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<LLMWikiSettings> | null);
 	}
 
 	async saveSettings() {

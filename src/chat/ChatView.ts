@@ -1,6 +1,7 @@
 import { ItemView, WorkspaceLeaf, MarkdownRenderer, normalizePath, TFile } from "obsidian";
 import type LLMWikiPlugin from "../main";
 import type { ToolResult } from "../agent/tools";
+import type { ChatMessage } from "../agent/core";
 
 export const VIEW_TYPE_CHAT = "llm-wiki-chat-view";
 
@@ -238,7 +239,7 @@ export class ChatView extends ItemView {
 		this.currentContent = "";
 	}
 
-	showToolCall(name: string, args: any) {
+	showToolCall(name: string, args: Record<string, unknown>) {
 		const argsStr = JSON.stringify(args, null, 2);
 		if (this.currentAssistantEl) {
 			const card = this.currentAssistantEl.createEl("div", { cls: "llm-wiki-tool-card llm-wiki-tool-running" });
@@ -297,7 +298,7 @@ export class ChatView extends ItemView {
 		} catch { /* ignore */ }
 	}
 
-	private async loadChatHistory() {
+		private async loadChatHistory() {
 		try {
 			const path = normalizePath(`${this.plugin.settings.memoryFolder}/对话历史.json`);
 			const file = this.app.vault.getAbstractFileByPath(path);
@@ -306,13 +307,15 @@ export class ChatView extends ItemView {
 				return;
 			}
 			const rawData = await this.app.vault.read(file);
-			const data = JSON.parse(rawData);
-			this.plugin.agentCore?.setHistory(data.messages || []);
-			for (const msg of data.messages || []) {
+			const data = JSON.parse(rawData) as { messages: ChatMessage[]; savedAt: string };
+			const messages = Array.isArray(data.messages) ? data.messages : [];
+			this.plugin.agentCore?.setHistory(messages);
+			for (const msg of messages) {
 				if (msg.role === "user") {
-					this.addUserMessage(msg.content);
+					void this.addUserMessage(msg.content);
 				} else if (msg.role === "assistant" && !msg.tool_calls) {
 					this.addAssistantMessage(msg.content);
+					this.updateAssistantMessage(msg.content);
 					this.finalizeAssistantMessage();
 				}
 			}

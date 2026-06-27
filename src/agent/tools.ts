@@ -9,7 +9,16 @@ export interface ToolDefinition {
 		properties: { [key: string]: { type: string; description: string; enum?: string[] } };
 		required: string[];
 	};
-	execute: (args: any) => Promise<ToolResult>;
+	execute: (args: Record<string, unknown>) => Promise<ToolResult>;
+}
+
+export interface OpenAIToolDefinition {
+	type: "function";
+	function: {
+		name: string;
+		description: string;
+		parameters: ToolDefinition["parameters"];
+	};
 }
 
 export interface ToolResult {
@@ -26,6 +35,20 @@ export class ToolRegistry {
 		this.app = app;
 		this.settings = settings;
 		this.registerAllTools();
+	}
+
+	private getErrorMessage(e: unknown): string {
+		return e instanceof Error ? e.message : String(e);
+	}
+
+	private strArgs(args: Record<string, unknown>): Record<string, string> {
+		const result: Record<string, string> = {};
+		for (const [key, val] of Object.entries(args)) {
+			if (typeof val === "string") {
+				result[key] = val;
+			}
+		}
+		return result;
 	}
 
 	updateSettings(settings: LLMWikiSettings) {
@@ -51,15 +74,16 @@ export class ToolRegistry {
 			},
 			execute: async (args) => {
 				try {
-					const normalizedPath = normalizePath(args.path);
+					const a = this.strArgs(args);
+					const normalizedPath = normalizePath(a.path);
 					const file = this.app.vault.getAbstractFileByPath(normalizedPath);
 					if (!file || !(file instanceof TFile)) {
 						return { success: false, content: `文件不存在: ${normalizedPath}` };
 					}
 					const content = await this.app.vault.read(file);
 					return { success: true, content };
-				} catch (e: any) {
-					return { success: false, content: `读取文件失败: ${e.message}` };
+				} catch (e: unknown) {
+					return { success: false, content: `读取文件失败: ${this.getErrorMessage(e)}` };
 				}
 			},
 		});
@@ -77,7 +101,8 @@ export class ToolRegistry {
 			},
 			execute: async (args) => {
 				try {
-					const normalizedPath = normalizePath(args.path);
+					const a = this.strArgs(args);
+					const normalizedPath = normalizePath(a.path);
 					const rawCheck = this.isUnderRawMaterials(normalizedPath);
 					if (rawCheck) {
 						return { success: false, content: `禁止写入原始资料目录：${rawCheck}。00-原始资料/ 目录只读，不能修改。如果用户需要移动文件，请告知用户手动操作。` };
@@ -87,10 +112,10 @@ export class ToolRegistry {
 						return { success: false, content: `文件已存在，禁止覆盖：${normalizedPath}。请使用 append_vault_file 追加内容，或使用 update_knowledge_page 更新页面章节。` };
 					}
 					await this.ensureFolder(normalizedPath.substring(0, normalizedPath.lastIndexOf("/")));
-					await this.app.vault.create(normalizedPath, args.content);
+					await this.app.vault.create(normalizedPath, a.content);
 					return { success: true, content: `文件已创建: ${normalizedPath}` };
-				} catch (e: any) {
-					return { success: false, content: `创建文件失败: ${e.message}` };
+				} catch (e: unknown) {
+					return { success: false, content: `创建文件失败: ${this.getErrorMessage(e)}` };
 				}
 			},
 		});
@@ -108,7 +133,8 @@ export class ToolRegistry {
 			},
 			execute: async (args) => {
 				try {
-					const normalizedPath = normalizePath(args.path);
+					const a = this.strArgs(args);
+					const normalizedPath = normalizePath(a.path);
 					const rawCheck = this.isUnderRawMaterials(normalizedPath);
 					if (rawCheck) {
 						return { success: false, content: `禁止修改原始资料目录：${rawCheck}。00-原始资料/ 目录只读。` };
@@ -118,10 +144,10 @@ export class ToolRegistry {
 						return { success: false, content: `文件不存在: ${normalizedPath}` };
 					}
 					const existing = await this.app.vault.read(file);
-					await this.app.vault.modify(file, existing + "\n" + args.content);
+					await this.app.vault.modify(file, existing + "\n" + a.content);
 					return { success: true, content: `内容已追加到: ${normalizedPath}` };
-				} catch (e: any) {
-					return { success: false, content: `追加内容失败: ${e.message}` };
+				} catch (e: unknown) {
+					return { success: false, content: `追加内容失败: ${this.getErrorMessage(e)}` };
 				}
 			},
 		});
@@ -138,7 +164,8 @@ export class ToolRegistry {
 			},
 			execute: async (args) => {
 				try {
-					const normalizedPath = normalizePath(args.path);
+					const a = this.strArgs(args);
+					const normalizedPath = normalizePath(a.path);
 					const folder = this.app.vault.getAbstractFileByPath(normalizedPath);
 					if (!folder || !(folder instanceof TFolder)) {
 						return { success: false, content: `文件夹不存在: ${normalizedPath}` };
@@ -152,8 +179,8 @@ export class ToolRegistry {
 						}
 					}
 					return { success: true, content: items.length > 0 ? items.join("\n") : "文件夹为空" };
-				} catch (e: any) {
-					return { success: false, content: `列出文件夹失败: ${e.message}` };
+				} catch (e: unknown) {
+					return { success: false, content: `列出文件夹失败: ${this.getErrorMessage(e)}` };
 				}
 			},
 		});
@@ -170,11 +197,12 @@ export class ToolRegistry {
 			},
 			execute: async (args) => {
 				try {
-					const normalizedPath = normalizePath(args.path);
+					const a = this.strArgs(args);
+					const normalizedPath = normalizePath(a.path);
 					await this.ensureFolder(normalizedPath);
 					return { success: true, content: `文件夹已创建: ${normalizedPath}` };
-				} catch (e: any) {
-					return { success: false, content: `创建文件夹失败: ${e.message}` };
+				} catch (e: unknown) {
+					return { success: false, content: `创建文件夹失败: ${this.getErrorMessage(e)}` };
 				}
 			},
 		});
@@ -192,11 +220,12 @@ export class ToolRegistry {
 			},
 			execute: async (args) => {
 				try {
-					const query = args.query.toLowerCase();
+					const a = this.strArgs(args);
+					const query = a.query.toLowerCase();
 					const files = this.app.vault.getFiles();
 					let results = files.filter((f) => f.path.toLowerCase().includes(query));
-					if (args.folder) {
-						const folder = normalizePath(args.folder).toLowerCase();
+					if (a.folder) {
+						const folder = normalizePath(a.folder).toLowerCase();
 						results = results.filter((f) => f.path.toLowerCase().startsWith(folder));
 					}
 					const items = results.slice(0, 50).map((f) => `📄 ${f.path}`);
@@ -204,8 +233,8 @@ export class ToolRegistry {
 						success: true,
 						content: items.length > 0 ? `找到 ${results.length} 个文件:\n${items.join("\n")}` : "未找到匹配文件",
 					};
-				} catch (e: any) {
-					return { success: false, content: `搜索失败: ${e.message}` };
+				} catch (e: unknown) {
+					return { success: false, content: `搜索失败: ${this.getErrorMessage(e)}` };
 				}
 			},
 		});
@@ -223,10 +252,11 @@ export class ToolRegistry {
 			},
 			execute: async (args) => {
 				try {
-					const query = args.query.toLowerCase();
+					const a = this.strArgs(args);
+					const query = a.query.toLowerCase();
 					let files = this.app.vault.getMarkdownFiles();
-					if (args.folder) {
-						const folder = normalizePath(args.folder).toLowerCase();
+					if (a.folder) {
+						const folder = normalizePath(a.folder).toLowerCase();
 						files = files.filter((f) => f.path.toLowerCase().startsWith(folder));
 					}
 					const results: string[] = [];
@@ -240,8 +270,8 @@ export class ToolRegistry {
 						success: true,
 						content: results.length > 0 ? `找到 ${results.length} 个文件:\n${results.join("\n")}` : "未找到匹配内容",
 					};
-				} catch (e: any) {
-					return { success: false, content: `搜索失败: ${e.message}` };
+				} catch (e: unknown) {
+					return { success: false, content: `搜索失败: ${this.getErrorMessage(e)}` };
 				}
 			},
 		});
@@ -263,14 +293,15 @@ export class ToolRegistry {
 			},
 			execute: async (args) => {
 				try {
+					const a = this.strArgs(args);
 					const skillDir = normalizePath(this.settings.skillFolderPath);
 					const refDir = `${skillDir}/references`;
 					let filePath: string;
 
-					if (args.file === "SKILL.md") {
+					if (a.file === "SKILL.md") {
 						filePath = `${skillDir}/SKILL.md`;
 					} else {
-						filePath = `${refDir}/${args.file}`;
+						filePath = `${refDir}/${a.file}`;
 					}
 
 					const file = this.app.vault.getAbstractFileByPath(normalizePath(filePath));
@@ -279,8 +310,8 @@ export class ToolRegistry {
 					}
 					const content = await this.app.vault.read(file);
 					return { success: true, content };
-				} catch (e: any) {
-					return { success: false, content: `读取失败: ${e.message}` };
+				} catch (e: unknown) {
+					return { success: false, content: `读取失败: ${this.getErrorMessage(e)}` };
 				}
 			},
 		});
@@ -304,9 +335,10 @@ export class ToolRegistry {
 			},
 			execute: async (args) => {
 				try {
+					const a = this.strArgs(args);
 					const basePath = normalizePath(this.settings.knowledgeBasePath);
-					const categories = (args.categories || "核心概念,方法论,经典案例,人物传记,组织档案,行业分析").split(",");
-					const rawCategories = (args.raw_categories || "资料分类1,资料分类2").split(",");
+					const categories = (a.categories || "核心概念,方法论,经典案例,人物传记,组织档案,行业分析").split(",");
+					const rawCategories = (a.raw_categories || "资料分类1,资料分类2").split(",");
 
 					const folders = [
 						basePath,
@@ -328,35 +360,34 @@ export class ToolRegistry {
 						await this.ensureFolder(folder);
 					}
 
-					const indexContent = `# ${args.topic_name}知识库总索引\n\n## 一、知识点分类索引\n\n${categories
-						.map((cat: string, i: number) => `### ${i + 1}. ${cat.trim()}（0个）🔴\n\n（暂无知识点）`)
+					const indexContent = `# ${a.topic_name}知识库总索引\n\n## 一、知识点分类索引\n\n${categories
+						.map((cat, i) => `### ${i + 1}. ${cat.trim()}（0个）🔴\n\n（暂无知识点）`)
 						.join("\n\n")}\n\n---\n\n## 二、人物传记索引（0位）\n\n（暂无）\n\n---\n\n## 三、组织档案索引（0家）\n\n（暂无）\n\n---\n\n## 四、原始资料统计\n\n| 来源 | 数量 | 状态 |\n|------|------|------|\n${rawCategories
-						.map((cat: string) => `| ${cat.trim()} | 0份 | 🟡 收集中 |`)
+						.map((cat) => `| ${cat.trim()} | 0份 | 🟡 收集中 |`)
 						.join("\n")}\n\n---\n\n## 五、统计信息\n\n- 知识点总数：0个\n- 人物传记：0位\n- 组织档案：0家\n- 原始资料：0份\n- 关键词：0个\n\n---\n\n## 六、成熟度分布\n\n| 级别 | 数量 | 占比 | 下一步 |\n|------|------|------|--------|\n| 🟢 完整级 | 0个 | 0% | 维护 |\n| 🟡 基础级 | 0个 | 0% | 完善 |\n| 🔴 框架级 | 0个 | 0% | 优先补充 |\n`;
 
 					await this.createFileOnly(`${basePath}/20-知识索引/知识库总索引.md`, indexContent);
 
-					const keywordIndexContent = `# ${args.topic_name}关键词索引\n\n| 关键词 | 相关知识点 | 出现次数 |\n|--------|-----------|----------|\n\n（暂无关键词）\n`;
+					const keywordIndexContent = `# ${a.topic_name}关键词索引\n\n| 关键词 | 相关知识点 | 出现次数 |\n|--------|-----------|----------|\n\n（暂无关键词）\n`;
 					await this.createFileOnly(`${basePath}/20-知识索引/关键词索引.md`, keywordIndexContent);
 
-					const graphContent = `# ${args.topic_name}知识点关系图谱\n\n## 知识点关系\n\n\`\`\`mermaid\ngraph LR\n    start[知识库] --> 待补充\n\`\`\`\n\n## 关系说明\n\n（暂无关系数据）\n`;
+					const graphContent = `# ${a.topic_name}知识点关系图谱\n\n## 知识点关系\n\n\`\`\`mermaid\ngraph LR\n    start[知识库] --> 待补充\n\`\`\`\n\n## 关系说明\n\n（暂无关系数据）\n`;
 					await this.createFileOnly(`${basePath}/20-知识索引/知识点关系图谱.md`, graphContent);
 
-					const logContent = `# 知识库更新日志\n\n## ${new Date().toISOString().split("T")[0]} | 知识库初始化\n\n**操作人：** 知识库维护者\n**变更类型：** 新建\n**触发来源：** 用户指令\n\n### 变更内容\n\n初始化 ${args.topic_name} 知识库，创建目录结构和初始索引文件。\n\n### 新建页面\n\n- 20-知识索引/知识库总索引.md\n- 20-知识索引/关键词索引.md\n- 20-知识索引/知识点关系图谱.md\n- 30-维护记录/知识库更新日志.md\n\n---\n`;
+					const logContent = `# 知识库更新日志\n\n## ${new Date().toISOString().split("T")[0]} | 知识库初始化\n\n**操作人：** 知识库维护者\n**变更类型：** 新建\n**触发来源：** 用户指令\n\n### 变更内容\n\n初始化 ${a.topic_name} 知识库，创建目录结构和初始索引文件。\n\n### 新建页面\n\n- 20-知识索引/知识库总索引.md\n- 20-知识索引/关键词索引.md\n- 20-知识索引/知识点关系图谱.md\n- 30-维护记录/知识库更新日志.md\n\n---\n`;
 					await this.createFileOnly(`${basePath}/30-维护记录/知识库更新日志.md`, logContent);
 
 					const conflictContent = `# 冲突与错误记录\n\n（暂无冲突记录）\n`;
 					await this.createFileOnly(`${basePath}/30-维护记录/冲突与错误记录.md`, conflictContent);
 
-					let agentsContent = `# AGENTS.md — ${args.topic_name}知识库维护规则\n\n> 基于 Karpathy LLM Wiki 方法论\n\n## 目录结构\n\n\`\`\`\n${args.topic_name}/\n├── 00-原始资料/\n├── 10-知识点库/\n├── 20-知识索引/\n├── 30-维护记录/\n└── AGENTS.md\n\`\`\`\n`;
+					let agentsContent = `# AGENTS.md — ${a.topic_name}知识库维护规则\n\n> 基于 Karpathy LLM Wiki 方法论\n\n## 目录结构\n\n\`\`\`\n${a.topic_name}/\n├── 00-原始资料/\n├── 10-知识点库/\n├── 20-知识索引/\n├── 30-维护记录/\n└── AGENTS.md\n\`\`\`\n`;
 				try {
 					const templatePath = normalizePath(`${this.settings.skillFolderPath}/references/AGENTS-template.md`);
 					const templateFile = this.app.vault.getAbstractFileByPath(templatePath);
 					if (templateFile && templateFile instanceof TFile) {
 						const templateContent = await this.app.vault.read(templateFile);
 						agentsContent = templateContent
-							.replace(/\[专题名称\]/g, args.topic_name)
-							.replace(/\[专题名称\]/g, args.topic_name)
+							.replace(/\[专题名称\]/g, a.topic_name)
 							.replace(/YYYY-MM-DD/g, new Date().toISOString().split("T")[0])
 							.replace(/\[方括号\]/g, "");
 					}
@@ -365,10 +396,10 @@ export class ToolRegistry {
 
 					return {
 						success: true,
-						content: `知识库 "${args.topic_name}" 已初始化完成！\n\n创建的目录：\n- 00-原始资料/（含 ${rawCategories.length} 个分类）\n- 10-知识点库/（含 ${categories.length} 个分类）\n- 20-知识索引/\n- 30-维护记录/\n\n创建的文件：\n- 知识库总索引.md\n- 关键词索引.md\n- 知识点关系图谱.md\n- 知识库更新日志.md\n- 冲突与错误记录.md\n- AGENTS.md\n\n现在可以开始放入原始资料并执行摄取工作流了！`,
+						content: `知识库 "${a.topic_name}" 已初始化完成！\n\n创建的目录：\n- 00-原始资料/（含 ${rawCategories.length} 个分类）\n- 10-知识点库/（含 ${categories.length} 个分类）\n- 20-知识索引/\n- 30-维护记录/\n\n创建的文件：\n- 知识库总索引.md\n- 关键词索引.md\n- 知识点关系图谱.md\n- 知识库更新日志.md\n- 冲突与错误记录.md\n- AGENTS.md\n\n现在可以开始放入原始资料并执行摄取工作流了！`,
 					};
-				} catch (e: any) {
-					return { success: false, content: `初始化知识库失败: ${e.message}` };
+				} catch (e: unknown) {
+					return { success: false, content: `初始化知识库失败: ${this.getErrorMessage(e)}` };
 				}
 			},
 		});
@@ -386,7 +417,8 @@ export class ToolRegistry {
 			},
 			execute: async (args) => {
 				try {
-					const filePath = normalizePath(args.file_path);
+					const a = this.strArgs(args);
+					const filePath = normalizePath(a.file_path);
 					const file = this.app.vault.getAbstractFileByPath(filePath);
 					if (!file || !(file instanceof TFile)) {
 						return { success: false, content: `原始资料文件不存在: ${filePath}` };
@@ -394,14 +426,14 @@ export class ToolRegistry {
 					const content = await this.app.vault.read(file);
 					const preview = content.length > 8000 ? content.substring(0, 8000) + "\n\n...（以下内容省略，共" + content.length + "字）" : content;
 
-					const focusHint = args.focus_topics ? `重点关注知识点：${args.focus_topics}` : "请自行判断原始资料中有哪些值得提炼的知识点";
+					const focusHint = a.focus_topics ? `重点关注知识点：${a.focus_topics}` : "请自行判断原始资料中有哪些值得提炼的知识点";
 
 					return {
 						success: true,
 						content: `📄 已读取原始资料: ${filePath}（共${content.length}字）\n\n---\n内容预览:\n${preview}\n\n---\n\n## ⚠️ 接下来你必须按以下工作流执行，不能跳过任何步骤！\n\n### 必须完成的标准工作流：\n\n**Step 1 — 提炼知识点（你现在的位置）**\n${focusHint}\n\n**Step 2 — 一站式创建页面+索引+日志**\n- 调用 create_and_index_page 工具，传入 page_type、title、content（完整9章markdown）、entry_category、keywords\n- 不要手动拆分多个步骤，用这一个工具完成所有操作\n\n**Step 3 — 链接与入链**\n- 新页面创建后，必须在至少3个已有页面中使用 append_vault_file 添加入链（添加 [[知识点名称]] 到相关页面的「相关知识点」章节）\n\n**Step 4 — 执行自检清单**\n- 索引数量是否同步？\n- 新页面是否有 ≥3 个入链？\n- 更新日志是否已追加？（已由 create_and_index_page 自动完成）\n\n**Step 5 — 总结（最后一步，必须执行）**\n工作流全部完成后，必须用中文向用户完整总结：\n- 读取了哪个原始资料\n- 创建/更新了哪些知识点页面\n- 更新了哪些索引\n- 当前知识库概况（文件数、成熟度）`,
 					};
-				} catch (e: any) {
-					return { success: false, content: `摄取资料失败: ${e.message}` };
+				} catch (e: unknown) {
+					return { success: false, content: `摄取资料失败: ${this.getErrorMessage(e)}` };
 				}
 			},
 		});
@@ -437,101 +469,102 @@ export class ToolRegistry {
 			},
 			execute: async (args) => {
 				try {
+					const a = this.strArgs(args);
 					const basePath = normalizePath(this.settings.knowledgeBasePath);
-					const categoryPath = `${basePath}/10-知识点库/${args.category}`;
+					const categoryPath = `${basePath}/10-知识点库/${a.category}`;
 					await this.ensureFolder(categoryPath);
 
 					const today = new Date().toISOString().split("T")[0];
-					const filePath = `${categoryPath}/${args.title}.md`;
+					const filePath = `${categoryPath}/${a.title}.md`;
 					const existingFile = this.app.vault.getAbstractFileByPath(normalizePath(filePath));
 					if (existingFile && existingFile instanceof TFile) {
 						return { success: false, content: `知识点页面已存在，禁止覆盖：${filePath}。请使用 update_knowledge_page 追加内容。` };
 					}
 
-					if (args.content) {
-						await this.createFileOnly(filePath, args.content);
+					if (a.content) {
+						await this.createFileOnly(filePath, a.content);
 						return {
 							success: true,
 							content: `知识点页面已创建: ${filePath}（使用完整markdown内容）\n\n接下来必须执行：\n1. 使用 update_index 工具 update_index action=add_entry 以更新索引\n2. 使用 append_vault_file 追加更新日志到 30-维护记录/知识库更新日志.md\n\n或者直接使用 create_and_index_page 一站式完成上述全部步骤。`,
 						};
 					}
 
-					const maturity = args.maturity ? `${args.maturity}` : "基础级";
+					const maturity = a.maturity ? `${a.maturity}` : "基础级";
 					const maturityEmoji = maturity.includes("完整") ? "🟢" : maturity.includes("框架") ? "🔴" : "🟡";
 
 					let keyPointsSection = "### 要点1：[待补充]\n\n[待补充]";
-					if (args.key_points) {
+					if (a.key_points) {
 						try {
-							const points = JSON.parse(args.key_points);
+							const points = JSON.parse(a.key_points) as Array<{ name?: string; title?: string; content?: string; description?: string }>;
 							keyPointsSection = points
 								.map(
-									(p: any, i: number) =>
+									(p, i) =>
 										`### 要点${i + 1}：${p.name || p.title}\n\n${p.content || p.description || ""}`
 								)
 								.join("\n\n");
 						} catch {
-							keyPointsSection = args.key_points;
+							keyPointsSection = a.key_points;
 						}
 					}
 
 					let casesSection = "### 案例1：[待补充]\n\n[待补充]";
-					if (args.cases) {
+					if (a.cases) {
 						try {
-							const cases = JSON.parse(args.cases);
+							const cases = JSON.parse(a.cases) as Array<{ name?: string; title?: string; content?: string; description?: string }>;
 							casesSection = cases
 								.map(
-									(c: any, i: number) =>
+									(c, i) =>
 										`### 案例${i + 1}：${c.name || c.title}\n\n${c.content || c.description || ""}`
 								)
 								.join("\n\n");
 						} catch {
-							casesSection = args.cases;
+							casesSection = a.cases;
 						}
 					}
 
 					let methodsSection = "### 方法1：[待补充]\n\n[待补充]";
-					if (args.methods) {
+					if (a.methods) {
 						try {
-							const methods = JSON.parse(args.methods);
+							const methods = JSON.parse(a.methods) as Array<{ name?: string; title?: string; content?: string; description?: string }>;
 							methodsSection = methods
 								.map(
-									(m: any, i: number) =>
+									(m, i) =>
 										`### 方法${i + 1}：${m.name || m.title}\n\n${m.content || m.description || ""}`
 								)
 								.join("\n\n");
 						} catch {
-							methodsSection = args.methods;
+							methodsSection = a.methods;
 						}
 					}
 
 					let misconceptionsSection = "### 误区1：[待补充]\n\n[待补充]";
-					if (args.misconceptions) {
+					if (a.misconceptions) {
 						try {
-							const misconceptions = JSON.parse(args.misconceptions);
+							const misconceptions = JSON.parse(a.misconceptions) as Array<{ name?: string; title?: string; content?: string; description?: string }>;
 							misconceptionsSection = misconceptions
 								.map(
-									(m: any, i: number) =>
+									(m, i) =>
 										`### 误区${i + 1}：${m.name || m.title}\n\n${m.content || m.description || ""}`
 								)
 								.join("\n\n");
 						} catch {
-							misconceptionsSection = args.misconceptions;
+							misconceptionsSection = a.misconceptions;
 						}
 					}
 
-					const relatedTopics = (args.related_topics || "")
+					const relatedTopics = (a.related_topics || "")
 						.split(",")
-						.filter((t: string) => t.trim())
-						.map((t: string) => `- [[${t.trim()}]]`)
+						.filter((t) => t.trim())
+						.map((t) => `- [[${t.trim()}]]`)
 						.join("\n");
 
-					const sourceRefs = (args.source_refs || "")
+					const sourceRefs = (a.source_refs || "")
 						.split(",")
-						.filter((r: string) => r.trim())
-						.map((r: string) => `- [[${r.trim()}]]`)
+						.filter((r) => r.trim())
+						.map((r) => `- [[${r.trim()}]]`)
 						.join("\n");
 
-					const pageContent = `# ${args.title}\n\n> ${args.definition || "待补充"}\n\n> ${maturityEmoji} ${maturity} | 最后更新：${today}\n\n---\n\n## 一、核心定义\n\n${args.core_content || "待补充"}\n\n---\n\n## 二、核心要点\n\n${keyPointsSection}\n\n---\n\n## 三、经典案例\n\n${casesSection}\n\n---\n\n## 四、实践方法\n\n${methodsSection}\n\n---\n\n## 五、常见误区\n\n${misconceptionsSection}\n\n---\n\n## 六、相关知识点\n\n${relatedTopics || "- [待补充]"}\n\n---\n\n## 七、原文出处\n\n> ⚠️ 链接规范：原文出处必须使用 Obsidian 双向链接 [[路径]] 语法\n\n${sourceRefs || "- [待补充]"}\n\n---\n\n## 八、对目标人群的启示\n\n${args.insights || "[待补充]"}\n\n---\n\n## 九、更新日志\n\n| 日期 | 操作类型 | 触发来源 | 变更内容 |\n|------|---------|---------|----------|\n| ${today} | 创建 | 用户指令 | 初始化页面 |\n`;
+					const pageContent = `# ${a.title}\n\n> ${a.definition || "待补充"}\n\n> ${maturityEmoji} ${maturity} | 最后更新：${today}\n\n---\n\n## 一、核心定义\n\n${a.core_content || "待补充"}\n\n---\n\n## 二、核心要点\n\n${keyPointsSection}\n\n---\n\n## 三、经典案例\n\n${casesSection}\n\n---\n\n## 四、实践方法\n\n${methodsSection}\n\n---\n\n## 五、常见误区\n\n${misconceptionsSection}\n\n---\n\n## 六、相关知识点\n\n${relatedTopics || "- [待补充]"}\n\n---\n\n## 七、原文出处\n\n> ⚠️ 链接规范：原文出处必须使用 Obsidian 双向链接 [[路径]] 语法\n\n${sourceRefs || "- [待补充]"}\n\n---\n\n## 八、对目标人群的启示\n\n${a.insights || "[待补充]"}\n\n---\n\n## 九、更新日志\n\n| 日期 | 操作类型 | 触发来源 | 变更内容 |\n|------|---------|---------|----------|\n| ${today} | 创建 | 用户指令 | 初始化页面 |\n`;
 
 					await this.createFileOnly(filePath, pageContent);
 
@@ -539,8 +572,8 @@ export class ToolRegistry {
 						success: true,
 						content: `知识点页面已创建: ${filePath}\n\n接下来必须执行：\n1. 使用 update_index 工具 action=add_entry 更新索引\n2. 在至少3个已有页面中添加入链\n3. 使用 append_vault_file 追加更新日志到 30-维护记录/知识库更新日志.md\n\n推荐直接使用 create_and_index_page 一站式完成以上步骤。`,
 					};
-				} catch (e: any) {
-					return { success: false, content: `创建知识点页面失败: ${e.message}` };
+				} catch (e: unknown) {
+					return { success: false, content: `创建知识点页面失败: ${this.getErrorMessage(e)}` };
 				}
 			},
 		});
@@ -572,24 +605,25 @@ export class ToolRegistry {
 			},
 			execute: async (args) => {
 				try {
+					const a = this.strArgs(args);
 					const basePath = normalizePath(this.settings.knowledgeBasePath);
 					const today = new Date().toISOString().split("T")[0];
-					const maturityEmoji = args.maturity?.includes("完整") ? "🟢" : args.maturity?.includes("框架") ? "🔴" : "🟡";
+					const maturityEmoji = a.maturity?.includes("完整") ? "🟢" : a.maturity?.includes("框架") ? "🔴" : "🟡";
 
-					let category = args.category || "未分类";
-					if (args.page_type === "person") category = "人物传记";
-					else if (args.page_type === "organization") category = "组织档案";
+					let category = a.category || "未分类";
+					if (a.page_type === "person") category = "人物传记";
+					else if (a.page_type === "organization") category = "组织档案";
 
 					const categoryPath = `${basePath}/10-知识点库/${category}`;
 					await this.ensureFolder(categoryPath);
-					const filePath = `${categoryPath}/${args.title}.md`;
+					const filePath = `${categoryPath}/${a.title}.md`;
 					const existing = this.app.vault.getAbstractFileByPath(normalizePath(filePath));
 					if (existing && existing instanceof TFile) {
 						return { success: false, content: `页面已存在，禁止覆盖：${filePath}。请使用 update_knowledge_page 追加内容。` };
 					}
-					await this.createFileOnly(filePath, args.content);
+					await this.createFileOnly(filePath, a.content);
 
-					const indexCategory = args.entry_category || category;
+					const indexCategory = a.entry_category || category;
 
 					const indexPath = `${basePath}/20-知识索引/知识库总索引.md`;
 					const indexFile = this.app.vault.getAbstractFileByPath(normalizePath(indexPath));
@@ -606,7 +640,7 @@ export class ToolRegistry {
 							const countMatch = categorySection.match(/\((\d+)个\)/);
 							const currentCount = countMatch ? parseInt(countMatch[1]) : 0;
 							const updatedSection = categorySection.replace(`(${currentCount}个)`, `(${currentCount + 1}个)`).replace(/（暂无知识点）/, "");
-							const newEntry = `- [[${args.title}]] ${maturityEmoji} - ${args.entry_description || "待补充"}`;
+							const newEntry = `- [[${a.title}]] ${maturityEmoji} - ${a.entry_description || "待补充"}`;
 							const updatedContent = indexContent.substring(0, categoryStart) + updatedSection.trimEnd() + "\n" + newEntry + "\n" + indexContent.substring(endPos);
 							await this.app.vault.modify(indexFile, updatedContent);
 
@@ -617,12 +651,12 @@ export class ToolRegistry {
 							}
 						}
 
-						if (args.keywords) {
+						if (a.keywords) {
 							const keywordPath = `${basePath}/20-知识索引/关键词索引.md`;
 							const keywordFile = this.app.vault.getAbstractFileByPath(normalizePath(keywordPath));
 							if (keywordFile && keywordFile instanceof TFile) {
 								const kwContent = await this.app.vault.read(keywordFile);
-								const newKeywords = args.keywords.split(",").map((k: string) => `| ${k.trim()} | [[${args.title}]] | 1 |`).join("\n");
+								const newKeywords = a.keywords.split(",").map((k) => `| ${k.trim()} | [[${a.title}]] | 1 |`).join("\n");
 								await this.app.vault.modify(keywordFile, kwContent.replace("（暂无关键词）", newKeywords));
 							}
 						}
@@ -630,7 +664,7 @@ export class ToolRegistry {
 
 					const logPath = `${basePath}/30-维护记录/知识库更新日志.md`;
 					const logFile = this.app.vault.getAbstractFileByPath(normalizePath(logPath));
-					const logEntry = `\n## ${today} | 新建知识点：${args.title}\n\n**操作人：** 知识库维护者\n**变更类型：** 新建\n**触发来源：** 用户指令\n\n### 变更内容\n\n创建知识点页面：${args.title}（${category}）\n\n### 新建页面\n\n- ${filePath}\n\n### 同步更新\n\n- 20-知识索引/知识库总索引.md - 添加条目\n\n---\n`;
+					const logEntry = `\n## ${today} | 新建知识点：${a.title}\n\n**操作人：** 知识库维护者\n**变更类型：** 新建\n**触发来源：** 用户指令\n\n### 变更内容\n\n创建知识点页面：${a.title}（${category}）\n\n### 新建页面\n\n- ${filePath}\n\n### 同步更新\n\n- 20-知识索引/知识库总索引.md - 添加条目\n\n---\n`;
 					if (logFile && logFile instanceof TFile) {
 						const existing = await this.app.vault.read(logFile);
 						await this.app.vault.modify(logFile, existing + logEntry);
@@ -640,10 +674,10 @@ export class ToolRegistry {
 
 					return {
 						success: true,
-						content: `一站式操作完成！\n1. ✅ 页面已创建: ${filePath}\n2. ✅ 索引已更新: ${indexCategory} +1\n3. ✅ 更新日志已追加\n\n请继续：\n4. 在至少3个已有页面中添加入链（用 append_vault_file 追加 [[${args.title}]] 到相关页面的「相关知识点」章节）\n5. 执行自检清单`,
+						content: `一站式操作完成！\n1. ✅ 页面已创建: ${filePath}\n2. ✅ 索引已更新: ${indexCategory} +1\n3. ✅ 更新日志已追加\n\n请继续：\n4. 在至少3个已有页面中添加入链（用 append_vault_file 追加 [[${a.title}]] 到相关页面的「相关知识点」章节）\n5. 执行自检清单`,
 					};
-				} catch (e: any) {
-					return { success: false, content: `一站式创建失败: ${e.message}` };
+				} catch (e: unknown) {
+					return { success: false, content: `一站式创建失败: ${this.getErrorMessage(e)}` };
 				}
 			},
 		});
@@ -676,64 +710,65 @@ export class ToolRegistry {
 			},
 			execute: async (args) => {
 				try {
+					const a = this.strArgs(args);
 					const basePath = normalizePath(this.settings.knowledgeBasePath);
 					const categoryPath = `${basePath}/10-知识点库/人物传记`;
 					await this.ensureFolder(categoryPath);
 
 					const today = new Date().toISOString().split("T")[0];
-					const maturity = args.maturity || "🟡 基础级";
+					const maturity = a.maturity || "🟡 基础级";
 
 					let contributionsSection = "### 贡献1：[待补充]\n\n[待补充]";
-					if (args.contributions) {
+					if (a.contributions) {
 						try {
-							const contributions = JSON.parse(args.contributions);
+							const contributions = JSON.parse(a.contributions) as Array<{ name?: string; title?: string; content?: string; description?: string }>;
 							contributionsSection = contributions
 								.map(
-									(c: any, i: number) =>
+									(c, i) =>
 										`### 贡献${i + 1}：${c.name || c.title}\n\n${c.content || c.description || ""}`
 								)
 								.join("\n\n");
 						} catch {
-							contributionsSection = args.contributions;
+							contributionsSection = a.contributions;
 						}
 					}
 
 					let quotesSection = "> [待补充]";
-					if (args.quotes) {
+					if (a.quotes) {
 						try {
-							const quotes = JSON.parse(args.quotes);
+							const quotes = JSON.parse(a.quotes) as Array<{ content?: string; text?: string; source?: string }>;
 							quotesSection = quotes
 								.map(
-									(q: any) =>
+									(q) =>
 										`> "${q.content || q.text}"\n> —— ${q.source || "出处待补充"}`
 								)
 								.join("\n\n");
 						} catch {
-							quotesSection = args.quotes;
+							quotesSection = a.quotes;
 						}
 					}
 
-					const relatedTopics = (args.related_topics || "")
+					const relatedTopics = (a.related_topics || "")
 						.split(",")
-						.filter((t: string) => t.trim())
-						.map((t: string) => `- [[${t.trim()}]]`)
+						.filter((t) => t.trim())
+						.map((t) => `- [[${t.trim()}]]`)
 						.join("\n");
 
-					const relatedOrgs = (args.related_orgs || "")
+					const relatedOrgs = (a.related_orgs || "")
 						.split(",")
-						.filter((o: string) => o.trim())
-						.map((o: string) => `- [[${o.trim()}]]`)
+						.filter((o) => o.trim())
+						.map((o) => `- [[${o.trim()}]]`)
 						.join("\n");
 
-					const sourceRefs = (args.source_refs || "")
+					const sourceRefs = (a.source_refs || "")
 						.split(",")
-						.filter((r: string) => r.trim())
-						.map((r: string) => `- [[${r.trim()}]]`)
+						.filter((r) => r.trim())
+						.map((r) => `- [[${r.trim()}]]`)
 						.join("\n");
 
-					const pageContent = `# ${args.name}\n\n> ${args.intro}\n\n> ${maturity} | 约2000字 | 最后更新：${today}\n\n---\n\n## 一、人物简介\n\n- **姓名**：${args.name}\n- **生卒年**：${args.birth_year || "待补充"}\n- **身份**：${args.identity}\n- **与领域的关系**：${args.field_relation || "待补充"}\n\n---\n\n## 二、生平经历\n\n${args.biography || "### 早期经历\n\n[待补充]\n\n### 关键转折\n\n[待补充]\n\n### 主要成就\n\n[待补充]"}\n\n---\n\n## 三、核心贡献\n\n${contributionsSection}\n\n---\n\n## 四、经典语录\n\n${quotesSection}\n\n---\n\n## 五、影响与启示\n\n${args.influence || "[待补充]"}\n\n---\n\n## 六、相关知识点\n\n${relatedTopics || "- [待补充]"}\n\n---\n\n## 七、相关组织\n\n${relatedOrgs || "- [待补充]"}\n\n---\n\n## 八、原文出处\n\n> ⚠️ 链接规范：必须使用 Obsidian 双向链接 [[路径]] 语法\n\n${sourceRefs || "- [待补充]"}\n\n---\n\n## 九、更新日志\n\n| 日期 | 操作类型 | 触发来源 | 变更内容 |\n|------|---------|---------|----------|\n| ${today} | 创建 | 用户指令 | 初始化页面 |\n`;
+					const pageContent = `# ${a.name}\n\n> ${a.intro}\n\n> ${maturity} | 约2000字 | 最后更新：${today}\n\n---\n\n## 一、人物简介\n\n- **姓名**：${a.name}\n- **生卒年**：${a.birth_year || "待补充"}\n- **身份**：${a.identity}\n- **与领域的关系**：${a.field_relation || "待补充"}\n\n---\n\n## 二、生平经历\n\n${a.biography || "### 早期经历\n\n[待补充]\n\n### 关键转折\n\n[待补充]\n\n### 主要成就\n\n[待补充]"}\n\n---\n\n## 三、核心贡献\n\n${contributionsSection}\n\n---\n\n## 四、经典语录\n\n${quotesSection}\n\n---\n\n## 五、影响与启示\n\n${a.influence || "[待补充]"}\n\n---\n\n## 六、相关知识点\n\n${relatedTopics || "- [待补充]"}\n\n---\n\n## 七、相关组织\n\n${relatedOrgs || "- [待补充]"}\n\n---\n\n## 八、原文出处\n\n> ⚠️ 链接规范：必须使用 Obsidian 双向链接 [[路径]] 语法\n\n${sourceRefs || "- [待补充]"}\n\n---\n\n## 九、更新日志\n\n| 日期 | 操作类型 | 触发来源 | 变更内容 |\n|------|---------|---------|----------|\n| ${today} | 创建 | 用户指令 | 初始化页面 |\n`;
 
-					const filePath = `${categoryPath}/${args.name}.md`;
+					const filePath = `${categoryPath}/${a.name}.md`;
 					const existingPerson = this.app.vault.getAbstractFileByPath(normalizePath(filePath));
 					if (existingPerson && existingPerson instanceof TFile) {
 						return { success: false, content: `人物传记页面已存在，禁止覆盖：${filePath}。请使用 update_knowledge_page 追加内容。` };
@@ -744,8 +779,8 @@ export class ToolRegistry {
 						success: true,
 						content: `人物传记页面已创建: ${filePath}\n\n请继续执行：\n1. 使用 update_index 工具更新索引\n2. 在至少3个已有页面中添加入链\n3. 追加更新日志`,
 					};
-				} catch (e: any) {
-					return { success: false, content: `创建人物传记页面失败: ${e.message}` };
+				} catch (e: unknown) {
+					return { success: false, content: `创建人物传记页面失败: ${this.getErrorMessage(e)}` };
 				}
 			},
 		});
@@ -778,49 +813,50 @@ export class ToolRegistry {
 			},
 			execute: async (args) => {
 				try {
+					const a = this.strArgs(args);
 					const basePath = normalizePath(this.settings.knowledgeBasePath);
 					const categoryPath = `${basePath}/10-知识点库/组织档案`;
 					await this.ensureFolder(categoryPath);
 
 					const today = new Date().toISOString().split("T")[0];
-					const maturity = args.maturity || "🟡 基础级";
+					const maturity = a.maturity || "🟡 基础级";
 
 					let eventsSection = "### 事件1：[待补充]\n\n[待补充]";
-					if (args.events) {
+					if (a.events) {
 						try {
-							const events = JSON.parse(args.events);
+							const events = JSON.parse(a.events) as Array<{ name?: string; title?: string; content?: string; description?: string }>;
 							eventsSection = events
 								.map(
-									(e: any, i: number) =>
+									(e, i) =>
 										`### 事件${i + 1}：${e.name || e.title}\n\n${e.content || e.description || ""}`
 								)
 								.join("\n\n");
 						} catch {
-							eventsSection = args.events;
+							eventsSection = a.events;
 						}
 					}
 
-					const keyFigures = (args.key_figures || "")
+					const keyFigures = (a.key_figures || "")
 						.split(",")
-						.filter((f: string) => f.trim())
-						.map((f: string) => `- [[${f.trim()}]]`)
+						.filter((f) => f.trim())
+						.map((f) => `- [[${f.trim()}]]`)
 						.join("\n");
 
-					const relatedTopics = (args.related_topics || "")
+					const relatedTopics = (a.related_topics || "")
 						.split(",")
-						.filter((t: string) => t.trim())
-						.map((t: string) => `- [[${t.trim()}]]`)
+						.filter((t) => t.trim())
+						.map((t) => `- [[${t.trim()}]]`)
 						.join("\n");
 
-					const sourceRefs = (args.source_refs || "")
+					const sourceRefs = (a.source_refs || "")
 						.split(",")
-						.filter((r: string) => r.trim())
-						.map((r: string) => `- [[${r.trim()}]]`)
+						.filter((r) => r.trim())
+						.map((r) => `- [[${r.trim()}]]`)
 						.join("\n");
 
-					const pageContent = `# ${args.name}\n\n> ${args.intro}\n\n> ${maturity} | 约2000字 | 最后更新：${today}\n\n---\n\n## 一、组织简介\n\n- **名称**：${args.name}\n- **成立年份**：${args.founded_year || "待补充"}\n- **总部位置**：${args.headquarters || "待补充"}\n- **主营业务**：${args.main_business}\n- **行业分类**：${args.industry || "待补充"}\n\n---\n\n## 二、发展历程\n\n${args.history || "### 创立阶段\n\n[待补充]\n\n### 成长阶段\n\n[待补充]\n\n### 现状\n\n[待补充]"}\n\n---\n\n## 三、核心业务/模式\n\n${args.core_business || "[待补充]"}\n\n---\n\n## 四、关键人物\n\n${keyFigures || "- [待补充]"}\n\n---\n\n## 五、重要事件/案例\n\n${eventsSection}\n\n---\n\n## 六、相关知识点\n\n${relatedTopics || "- [待补充]"}\n\n---\n\n## 七、原文出处\n\n> ⚠️ 链接规范：必须使用 Obsidian 双向链接 [[路径]] 语法\n\n${sourceRefs || "- [待补充]"}\n\n---\n\n## 八、最新动态\n\n[待补充]\n\n---\n\n## 九、更新日志\n\n| 日期 | 操作类型 | 触发来源 | 变更内容 |\n|------|---------|---------|----------|\n| ${today} | 创建 | 用户指令 | 初始化页面 |\n`;
+					const pageContent = `# ${a.name}\n\n> ${a.intro}\n\n> ${maturity} | 约2000字 | 最后更新：${today}\n\n---\n\n## 一、组织简介\n\n- **名称**：${a.name}\n- **成立年份**：${a.founded_year || "待补充"}\n- **总部位置**：${a.headquarters || "待补充"}\n- **主营业务**：${a.main_business}\n- **行业分类**：${a.industry || "待补充"}\n\n---\n\n## 二、发展历程\n\n${a.history || "### 创立阶段\n\n[待补充]\n\n### 成长阶段\n\n[待补充]\n\n### 现状\n\n[待补充]"}\n\n---\n\n## 三、核心业务/模式\n\n${a.core_business || "[待补充]"}\n\n---\n\n## 四、关键人物\n\n${keyFigures || "- [待补充]"}\n\n---\n\n## 五、重要事件/案例\n\n${eventsSection}\n\n---\n\n## 六、相关知识点\n\n${relatedTopics || "- [待补充]"}\n\n---\n\n## 七、原文出处\n\n> ⚠️ 链接规范：必须使用 Obsidian 双向链接 [[路径]] 语法\n\n${sourceRefs || "- [待补充]"}\n\n---\n\n## 八、最新动态\n\n[待补充]\n\n---\n\n## 九、更新日志\n\n| 日期 | 操作类型 | 触发来源 | 变更内容 |\n|------|---------|---------|----------|\n| ${today} | 创建 | 用户指令 | 初始化页面 |\n`;
 
-					const filePath = `${categoryPath}/${args.name}.md`;
+					const filePath = `${categoryPath}/${a.name}.md`;
 					const existingOrg = this.app.vault.getAbstractFileByPath(normalizePath(filePath));
 					if (existingOrg && existingOrg instanceof TFile) {
 						return { success: false, content: `组织档案页面已存在，禁止覆盖：${filePath}。请使用 update_knowledge_page 追加内容。` };
@@ -831,8 +867,8 @@ export class ToolRegistry {
 						success: true,
 						content: `组织档案页面已创建: ${filePath}\n\n请继续执行：\n1. 使用 update_index 工具更新索引\n2. 在至少3个已有页面中添加入链\n3. 追加更新日志`,
 					};
-				} catch (e: any) {
-					return { success: false, content: `创建组织档案页面失败: ${e.message}` };
+				} catch (e: unknown) {
+					return { success: false, content: `创建组织档案页面失败: ${this.getErrorMessage(e)}` };
 				}
 			},
 		});
@@ -859,7 +895,8 @@ export class ToolRegistry {
 			},
 			execute: async (args) => {
 				try {
-					const normalizedPath = normalizePath(args.path);
+					const a = this.strArgs(args);
+					const normalizedPath = normalizePath(a.path);
 					const file = this.app.vault.getAbstractFileByPath(normalizedPath);
 					if (!file || !(file instanceof TFile)) {
 						return { success: false, content: `文件不存在: ${normalizedPath}` };
@@ -879,7 +916,7 @@ export class ToolRegistry {
 						"更新日志": ["更新日志", "日志"],
 					};
 
-					const keywords = sectionNames[args.section] || [args.section];
+					const keywords = sectionNames[a.section] || [a.section];
 					let sectionIndex = -1;
 					let matchedHeader = "";
 
@@ -894,13 +931,13 @@ export class ToolRegistry {
 					}
 
 					if (sectionIndex === -1) {
-						const fallbackRegex = new RegExp(`##\\s*[\\d一二三四五六七八九十、\\.]*\\s*${args.section.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`);
+						const fallbackRegex = new RegExp(`##\\s*[\\d一二三四五六七八九十、\\.]*\\s*${a.section.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`);
 						const fallbackMatch = existing.match(fallbackRegex);
 						if (fallbackMatch) {
 							sectionIndex = fallbackMatch.index!;
 							matchedHeader = fallbackMatch[0];
 						} else {
-							return { success: false, content: `未找到章节「${args.section}」。文件中的章节标题格式可能不同，请先使用 read_vault_file 读取文件查看实际章节名称` };
+							return { success: false, content: `未找到章节「${a.section}」。文件中的章节标题格式可能不同，请先使用 read_vault_file 读取文件查看实际章节名称` };
 						}
 					}
 
@@ -911,10 +948,10 @@ export class ToolRegistry {
 					const after = existing.substring(endIndex);
 
 					const currentSection = existing.substring(sectionIndex, endIndex);
-					let newContent = before + currentSection + "\n\n" + args.content + after;
+					let newContent = before + currentSection + "\n\n" + a.content + after;
 
 					const today = new Date().toISOString().split("T")[0];
-					const logLine = `| ${today} | 修改 | 用户指令 | 更新${args.section}章节 |`;
+					const logLine = `| ${today} | 修改 | 用户指令 | 更新${a.section}章节 |`;
 
 					const logRegex = /##\s*[一二三四五六七八九十、]*\s*更新日志/;
 					const logMatch = newContent.match(logRegex);
@@ -933,9 +970,9 @@ export class ToolRegistry {
 					}
 
 					await this.app.vault.modify(file, newContent);
-					return { success: true, content: `章节「${args.section}」已更新: ${normalizedPath}\n\n请执行自检清单并更新集中日志。` };
-				} catch (e: any) {
-					return { success: false, content: `更新知识点页面失败: ${e.message}` };
+					return { success: true, content: `章节「${a.section}」已更新: ${normalizedPath}\n\n请执行自检清单并更新集中日志。` };
+				} catch (e: unknown) {
+					return { success: false, content: `更新知识点页面失败: ${this.getErrorMessage(e)}` };
 				}
 			},
 		});
@@ -965,6 +1002,7 @@ export class ToolRegistry {
 			},
 			execute: async (args) => {
 				try {
+					const a = this.strArgs(args);
 					const basePath = normalizePath(this.settings.knowledgeBasePath);
 					const indexPath = `${basePath}/20-知识索引/知识库总索引.md`;
 					const indexFile = this.app.vault.getAbstractFileByPath(normalizePath(indexPath));
@@ -973,9 +1011,9 @@ export class ToolRegistry {
 						return { success: false, content: `索引文件不存在: ${indexPath}` };
 					}
 
-					if (args.action === "add_entry" && args.entry_name && args.entry_category) {
+					if (a.action === "add_entry" && a.entry_name && a.entry_category) {
 						const indexContent = await this.app.vault.read(indexFile);
-						const categoryHeader = args.entry_category;
+						const categoryHeader = a.entry_category;
 						const categoryPattern = new RegExp(
 							`###\\s+\\d+\\.\\s+${categoryHeader.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\(\\d+个\\)`
 						);
@@ -995,8 +1033,8 @@ export class ToolRegistry {
 								.replace(`(${currentCount}个)`, `(${newCount}个)`)
 								.replace(/（暂无知识点）/, "");
 
-							const maturity = args.entry_maturity || "🟡";
-							const newEntry = `- [[${args.entry_name}]] ${maturity} - ${args.entry_description || "待补充"}`;
+							const maturity = a.entry_maturity || "🟡";
+							const newEntry = `- [[${a.entry_name}]] ${maturity} - ${a.entry_description || "待补充"}`;
 
 							const updatedContent =
 								indexContent.substring(0, categoryStart) +
@@ -1019,14 +1057,14 @@ export class ToolRegistry {
 							}
 						}
 
-						if (args.keywords) {
+						if (a.keywords) {
 							const keywordPath = `${basePath}/20-知识索引/关键词索引.md`;
 							const keywordFile = this.app.vault.getAbstractFileByPath(normalizePath(keywordPath));
 							if (keywordFile && keywordFile instanceof TFile) {
 								const kwContent = await this.app.vault.read(keywordFile);
-								const newKeywords = args.keywords
+								const newKeywords = a.keywords
 									.split(",")
-									.map((k: string) => `| ${k.trim()} | [[${args.entry_name}]] | 1 |`)
+									.map((k) => `| ${k.trim()} | [[${a.entry_name}]] | 1 |`)
 									.join("\n");
 								const updatedKwContent = kwContent.replace(
 									"（暂无关键词）",
@@ -1036,10 +1074,10 @@ export class ToolRegistry {
 							}
 						}
 
-						return { success: true, content: `索引已更新：添加 ${args.entry_name} 到 ${args.entry_category}` };
+						return { success: true, content: `索引已更新：添加 ${a.entry_name} 到 ${a.entry_category}` };
 					}
 
-					if (args.action === "refresh_all") {
+					if (a.action === "refresh_all") {
 						return {
 							success: true,
 							content: "请使用 list_vault_folder 工具扫描各分类目录，然后手动更新索引数量。",
@@ -1047,8 +1085,8 @@ export class ToolRegistry {
 					}
 
 					return { success: true, content: "索引更新操作完成" };
-				} catch (e: any) {
-					return { success: false, content: `更新索引失败: ${e.message}` };
+				} catch (e: unknown) {
+					return { success: false, content: `更新索引失败: ${this.getErrorMessage(e)}` };
 				}
 			},
 		});
@@ -1065,6 +1103,7 @@ export class ToolRegistry {
 			},
 			execute: async (args) => {
 				try {
+					const a = this.strArgs(args);
 					const basePath = normalizePath(this.settings.knowledgeBasePath);
 					const indexPath = `${basePath}/20-知识索引/知识库总索引.md`;
 					const indexFile = this.app.vault.getAbstractFileByPath(normalizePath(indexPath));
@@ -1077,7 +1116,7 @@ export class ToolRegistry {
 					}
 
 					const indexContent = await this.app.vault.read(indexFile);
-					const query = args.query.toLowerCase();
+					const query = a.query.toLowerCase();
 					const lines = indexContent.split("\n");
 					const relevantEntries: string[] = [];
 
@@ -1089,16 +1128,16 @@ export class ToolRegistry {
 
 					let result = `知识库索引概览:\n${indexContent.substring(0, 2000)}\n\n`;
 					if (relevantEntries.length > 0) {
-						result += `与 "${args.query}" 相关的条目:\n${relevantEntries.join("\n")}\n\n`;
+						result += `与 "${a.query}" 相关的条目:\n${relevantEntries.join("\n")}\n\n`;
 					} else {
-						result += `在索引中未找到与 "${args.query}" 直接匹配的条目。\n\n`;
+						result += `在索引中未找到与 "${a.query}" 直接匹配的条目。\n\n`;
 					}
 
 					result += `请根据以上索引信息，使用 read_vault_file 工具读取相关知识点页面的详细内容来回答用户问题。`;
 
 					return { success: true, content: result };
-				} catch (e: any) {
-					return { success: false, content: `查询知识库失败: ${e.message}` };
+				} catch (e: unknown) {
+					return { success: false, content: `查询知识库失败: ${this.getErrorMessage(e)}` };
 				}
 			},
 		});
@@ -1119,8 +1158,9 @@ export class ToolRegistry {
 			},
 			execute: async (args) => {
 				try {
+					const a = this.strArgs(args);
 					const basePath = normalizePath(this.settings.knowledgeBasePath);
-					const checkType = args.check_type || "full";
+					const checkType = a.check_type || "full";
 					const issues: string[] = [];
 
 					const knowledgePath = `${basePath}/10-知识点库`;
@@ -1209,8 +1249,8 @@ export class ToolRegistry {
 							: `Lint 检查完成，未发现明显问题。知识库状态良好！\n\n共检查 ${allFiles.length} 个文件。`;
 
 					return { success: true, content: result };
-				} catch (e: any) {
-					return { success: false, content: `Lint 检查失败: ${e.message}` };
+				} catch (e: unknown) {
+					return { success: false, content: `Lint 检查失败: ${this.getErrorMessage(e)}` };
 				}
 			},
 		});
@@ -1223,7 +1263,7 @@ export class ToolRegistry {
 				properties: {},
 				required: [],
 			},
-			execute: async (args) => {
+			execute: async () => {
 				try {
 					const basePath = normalizePath(this.settings.knowledgeBasePath);
 					const rootFolder = this.app.vault.getAbstractFileByPath(basePath);
@@ -1286,8 +1326,8 @@ export class ToolRegistry {
 							.map(([k, v]) => `  - ${k}: ${v} 个文件`)
 							.join("\n")}\n\n📈 成熟度分布:\n  - 🟢 完整级: ${maturityCounts["🟢"]}个\n  - 🟡 基础级: ${maturityCounts["🟡"]}个\n  - 🔴 框架级: ${maturityCounts["🔴"]}个`,
 					};
-				} catch (e: any) {
-					return { success: false, content: `获取知识库状态失败: ${e.message}` };
+				} catch (e: unknown) {
+					return { success: false, content: `获取知识库状态失败: ${this.getErrorMessage(e)}` };
 				}
 			},
 		});
@@ -1312,11 +1352,12 @@ export class ToolRegistry {
 			},
 			execute: async (args) => {
 				try {
+					const a = this.strArgs(args);
 					const basePath = normalizePath(this.settings.knowledgeBasePath);
 					const conflictPath = `${basePath}/30-维护记录/冲突与错误记录.md`;
 					const today = new Date().toISOString().split("T")[0];
 
-					const entry = `\n## ⚠️ 知识点矛盾记录 (${today})\n\n**矛盾内容**：\n- 旧信息：${args.old_info}\n- 新信息：${args.new_info}\n\n**矛盾来源**：\n- 旧：[[${args.old_source || "待补充"}]]\n- 新：[[${args.new_source || "待补充"}]]\n\n**处理方式**：${args.resolution || "标注矛盾"}\n**记录时间**：${today}\n\n---\n`;
+					const entry = `\n## ⚠️ 知识点矛盾记录 (${today})\n\n**矛盾内容**：\n- 旧信息：${a.old_info}\n- 新信息：${a.new_info}\n\n**矛盾来源**：\n- 旧：[[${a.old_source || "待补充"}]]\n- 新：[[${a.new_source || "待补充"}]]\n\n**处理方式**：${a.resolution || "标注矛盾"}\n**记录时间**：${today}\n\n---\n`;
 
 					const file = this.app.vault.getAbstractFileByPath(normalizePath(conflictPath));
 					if (file && file instanceof TFile) {
@@ -1327,8 +1368,8 @@ export class ToolRegistry {
 					}
 
 					return { success: true, content: `冲突已记录到: ${conflictPath}` };
-				} catch (e: any) {
-					return { success: false, content: `记录冲突失败: ${e.message}` };
+				} catch (e: unknown) {
+					return { success: false, content: `记录冲突失败: ${this.getErrorMessage(e)}` };
 				}
 			},
 		});
@@ -1348,12 +1389,13 @@ export class ToolRegistry {
 			},
 			execute: async (args) => {
 				try {
+					const a = this.strArgs(args);
 					const memoryPath = normalizePath(`${this.settings.memoryFolder}/长期记忆.md`);
 					const file = this.app.vault.getAbstractFileByPath(memoryPath);
 					const today = new Date().toISOString().split("T")[0];
 					const now = new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
 
-					const entry = `\n### [${args.category}] ${today} ${now}\n${args.content}\n`;
+					const entry = `\n### [${a.category}] ${today} ${now}\n${a.content}\n`;
 
 					if (file && file instanceof TFile) {
 						const existing = await this.app.vault.read(file);
@@ -1367,8 +1409,8 @@ export class ToolRegistry {
 					}
 
 					return { success: true, content: `记忆已保存到: ${memoryPath}` };
-				} catch (e: any) {
-					return { success: false, content: `保存记忆失败: ${e.message}` };
+				} catch (e: unknown) {
+					return { success: false, content: `保存记忆失败: ${this.getErrorMessage(e)}` };
 				}
 			},
 		});
@@ -1386,6 +1428,7 @@ export class ToolRegistry {
 			},
 			execute: async (args) => {
 				try {
+					const a = this.strArgs(args);
 					const prefPath = normalizePath(`${this.settings.memoryFolder}/用户偏好.md`);
 					const file = this.app.vault.getAbstractFileByPath(prefPath);
 					const today = new Date().toISOString().split("T")[0];
@@ -1393,12 +1436,12 @@ export class ToolRegistry {
 					if (file && file instanceof TFile) {
 						const existing = await this.app.vault.read(file);
 						const lines = existing.split("\n");
-						const keyLineIdx = lines.findIndex((l) => l.startsWith(`- **${args.key}**:`));
+						const keyLineIdx = lines.findIndex((l) => l.startsWith(`- **${a.key}**:`));
 
 						if (keyLineIdx >= 0) {
-							lines[keyLineIdx] = `- **${args.key}**: ${args.value} (_${today}_)`;
+							lines[keyLineIdx] = `- **${a.key}**: ${a.value} (_${today}_)`;
 						} else {
-							lines.push(`- **${args.key}**: ${args.value} (_${today}_)`);
+							lines.push(`- **${a.key}**: ${a.value} (_${today}_)`);
 						}
 
 						await this.app.vault.modify(file, lines.join("\n"));
@@ -1406,13 +1449,13 @@ export class ToolRegistry {
 						await this.ensureFolder(this.settings.memoryFolder);
 						await this.createFileOnly(
 							prefPath,
-							`# 用户偏好\n\n> Agent 记录的用户偏好和习惯\n\n- **${args.key}**: ${args.value} (_${today}_)\n`
+							`# 用户偏好\n\n> Agent 记录的用户偏好和习惯\n\n- **${a.key}**: ${a.value} (_${today}_)\n`
 						);
 					}
 
-					return { success: true, content: `偏好已保存: ${args.key} = ${args.value}` };
-				} catch (e: any) {
-					return { success: false, content: `保存偏好失败: ${e.message}` };
+					return { success: true, content: `偏好已保存: ${a.key} = ${a.value}` };
+				} catch (e: unknown) {
+					return { success: false, content: `保存偏好失败: ${this.getErrorMessage(e)}` };
 				}
 			},
 		});
@@ -1430,11 +1473,12 @@ export class ToolRegistry {
 			},
 			execute: async (args) => {
 				try {
+					const a = this.strArgs(args);
 					const today = new Date().toISOString().split("T")[0];
 					const logPath = normalizePath(`${this.settings.memoryFolder}/日志/${today}.md`);
 					const file = this.app.vault.getAbstractFileByPath(logPath);
 
-					const entry = `\n## ${new Date().toLocaleTimeString("zh-CN")} | ${args.title}\n\n${args.content}\n\n---\n`;
+					const entry = `\n## ${new Date().toLocaleTimeString("zh-CN")} | ${a.title}\n\n${a.content}\n\n---\n`;
 
 					if (file && file instanceof TFile) {
 						const existing = await this.app.vault.read(file);
@@ -1448,8 +1492,8 @@ export class ToolRegistry {
 					}
 
 					return { success: true, content: `日志已写入: ${logPath}` };
-				} catch (e: any) {
-					return { success: false, content: `写入日志失败: ${e.message}` };
+				} catch (e: unknown) {
+					return { success: false, content: `写入日志失败: ${this.getErrorMessage(e)}` };
 				}
 			},
 		});
@@ -1462,7 +1506,7 @@ export class ToolRegistry {
 				properties: {},
 				required: [],
 			},
-			execute: async (args) => {
+			execute: async () => {
 				try {
 					const results: string[] = [];
 
@@ -1482,15 +1526,15 @@ export class ToolRegistry {
 						success: true,
 						content: results.length > 0 ? results.join("\n\n---\n\n") : "暂无记忆记录",
 					};
-				} catch (e: any) {
-					return { success: false, content: `读取记忆失败: ${e.message}` };
+				} catch (e: unknown) {
+					return { success: false, content: `读取记忆失败: ${this.getErrorMessage(e)}` };
 				}
 			},
 		});
 	}
 
-	getToolDefinitions(): ToolDefinition[] {
-		const definitions: ToolDefinition[] = [];
+	getToolDefinitions(): OpenAIToolDefinition[] {
+		const definitions: OpenAIToolDefinition[] = [];
 		for (const [, tool] of this.tools) {
 			definitions.push({
 				type: "function",
@@ -1504,7 +1548,7 @@ export class ToolRegistry {
 		return definitions;
 	}
 
-	async executeTool(name: string, args: any): Promise<ToolResult> {
+	async executeTool(name: string, args: Record<string, unknown>): Promise<ToolResult> {
 		const tool = this.tools.get(name);
 		if (!tool) {
 			return { success: false, content: `未知工具: ${name}` };
