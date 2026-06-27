@@ -123,7 +123,7 @@ export class ChatView extends ItemView {
 		this.sendBtn.addClass("llm-wiki-hidden");
 		this.stopBtn.removeClass("llm-wiki-hidden");
 
-		this.addUserMessage(text);
+		void this.addUserMessage(text);
 		this.addAssistantMessage("");
 
 		try {
@@ -135,7 +135,7 @@ export class ChatView extends ItemView {
 
 				const saveAfterComplete = async (content: string) => {
 					this.finalizeAssistantMessage();
-					this.autoLog(text, content);
+					void this.autoLog(text, content);
 					await this.saveChatHistory();
 				};
 
@@ -144,18 +144,18 @@ export class ChatView extends ItemView {
 						onToken: (token) => this.appendToken(token),
 						onToolCall: (name, args) => this.showToolCall(name, args),
 						onToolResult: (name, result) => this.showToolResult(name, result),
-						onComplete: saveAfterComplete,
-						onError: (error) => {
-							this.updateAssistantMessage(`❌ ${error}`);
-							this.finalizeAssistantMessage();
-						},
-					});
+					onComplete: (content: string) => { void saveAfterComplete(content); },
+					onError: (error) => {
+						this.updateAssistantMessage(`❌ ${error}`);
+						this.finalizeAssistantMessage();
+					},
+				});
 				} else {
 					await agent.chatNonStream(text, {
 						onToken: (token) => this.appendToken(token),
 						onToolCall: (name, args) => this.showToolCall(name, args),
 						onToolResult: (name, result) => this.showToolResult(name, result),
-						onComplete: saveAfterComplete,
+						onComplete: (content: string) => { void saveAfterComplete(content); },
 						onError: (error) => {
 							this.updateAssistantMessage(`❌ ${error}`);
 							this.finalizeAssistantMessage();
@@ -184,14 +184,14 @@ export class ChatView extends ItemView {
 		const msgDiv = this.messagesEl.createEl("div", { cls: "llm-wiki-message llm-wiki-user-message" });
 		msgDiv.createEl("div", { cls: "llm-wiki-message-sender", text: "你" });
 		const contentDiv = msgDiv.createEl("div", { cls: "llm-wiki-message-content" });
-		await MarkdownRenderer.render(this.app, text, contentDiv, "", this.plugin);
+		await MarkdownRenderer.render(this.app, text, contentDiv, "", this);
 		this.scrollToBottom();
 	}
 
 	private addSystemMessage(text: string) {
 		const msgDiv = this.messagesEl.createEl("div", { cls: "llm-wiki-message llm-wiki-system-message" });
 		const contentDiv = msgDiv.createEl("div", { cls: "llm-wiki-message-content" });
-		void MarkdownRenderer.render(this.app, text, contentDiv, "", this.plugin);
+		void MarkdownRenderer.render(this.app, text, contentDiv, "", this);
 	}
 
 	private addAssistantMessage(text: string) {
@@ -206,7 +206,7 @@ export class ChatView extends ItemView {
 		if (this.currentAssistantEl) {
 			this.currentContent = text;
 			this.currentAssistantEl.empty();
-			void MarkdownRenderer.render(this.app, text, this.currentAssistantEl, "", this.plugin);
+			void MarkdownRenderer.render(this.app, text, this.currentAssistantEl, "", this);
 			this.scrollToBottom();
 		}
 	}
@@ -227,7 +227,7 @@ export class ChatView extends ItemView {
 		}
 		if (this.tokenBuffer && this.currentAssistantEl) {
 			this.currentAssistantEl.empty();
-			void MarkdownRenderer.render(this.app, this.currentContent, this.currentAssistantEl, "", this.plugin);
+			void MarkdownRenderer.render(this.app, this.currentContent, this.currentAssistantEl, "", this);
 			this.tokenBuffer = "";
 		}
 	}

@@ -1,4 +1,4 @@
-import { Plugin } from "obsidian";
+import { Plugin, ItemView } from "obsidian";
 import { LLMWikiSettingTab, DEFAULT_SETTINGS, type LLMWikiSettings } from "./settings";
 import { AgentCore } from "./agent/core";
 import { ToolRegistry } from "./agent/tools";
@@ -68,25 +68,36 @@ export default class LLMWikiPlugin extends Plugin {
 		}
 
 		if (leaf) {
-			workspace.revealLeaf(leaf);
+			void workspace.revealLeaf(leaf);
 		}
 	}
 
 	applyTheme() {
-		// eslint-disable-next-line obsidianmd/no-document -- applyTheme runs on main window, popout not needed here
-		document.body.classList.remove(
-			"llm-wiki-theme-dark-blue",
-			"llm-wiki-theme-warm-light",
-			"llm-wiki-theme-obsidian-red",
-			"llm-wiki-theme-lavender",
-			"llm-wiki-theme-forest-green"
-		);
-		// eslint-disable-next-line obsidianmd/no-document
-		document.body.classList.add(`llm-wiki-theme-${this.settings.theme}`);
+		try {
+			const view = this.app.workspace.getActiveViewOfType(ItemView);
+			const doc = view ? view.containerEl.ownerDocument : window.document;
+			doc.body.classList.remove(
+				"llm-wiki-theme-dark-blue",
+				"llm-wiki-theme-warm-light",
+				"llm-wiki-theme-obsidian-red",
+				"llm-wiki-theme-lavender",
+				"llm-wiki-theme-forest-green"
+			);
+			doc.body.classList.add(`llm-wiki-theme-${this.settings.theme}`);
+		} catch {
+			window.document.body.classList.remove(
+				"llm-wiki-theme-dark-blue",
+				"llm-wiki-theme-warm-light",
+				"llm-wiki-theme-obsidian-red",
+				"llm-wiki-theme-lavender",
+				"llm-wiki-theme-forest-green"
+			);
+			window.document.body.classList.add(`llm-wiki-theme-${this.settings.theme}`);
+		}
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<LLMWikiSettings>);
 	}
 
 	async saveSettings() {
