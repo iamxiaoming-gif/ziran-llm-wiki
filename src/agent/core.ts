@@ -23,7 +23,6 @@ export class AgentCore {
 	settings: LLMWikiSettings;
 	toolRegistry: ToolRegistry;
 	history: ChatMessage[] = [];
-	abortController: AbortController | null = null;
 	private systemPrompt: string = "";
 
 	constructor(settings: LLMWikiSettings, toolRegistry: ToolRegistry) {
@@ -54,10 +53,6 @@ export class AgentCore {
 	}
 
 	abort() {
-		if (this.abortController) {
-			this.abortController.abort();
-			this.abortController = null;
-		}
 	}
 
 	async chatStream(userMessage: string, callbacks: ChatCallbacks): Promise<void> {
@@ -152,88 +147,29 @@ export class AgentCore {
 			tools: this.toolRegistry.getToolDefinitions(),
 			tool_choice: "auto" as const,
 			temperature: this.settings.temperature,
-			stream: true,
+			stream: false,
 		};
 
-		this.abortController = new AbortController();
-
-		// eslint-disable-next-line obsidianmd/no-fetch -- fetch needed for SSE streaming, requestUrl doesn't support it
-		const response = await fetch(url, {
+		const response = await requestUrl({
+			url,
 			method: "POST",
 			headers: {
 				"Content-Type": "application/json",
 				Authorization: `Bearer ${this.settings.apiKey}`,
 			},
 			body: JSON.stringify(body),
-			signal: this.abortController?.signal,
 		});
 
-		if (!response.ok) {
-			const errorText = await response.text().catch(() => "未知错误");
-			throw new Error(`API 请求失败: ${response.status} ${errorText}`);
+		const choice = response.json.choices?.[0];
+		if (!choice) throw new Error("API 返回为空");
+
+		const msg = choice.message || {};
+		const content: string = msg.content || "";
+		const toolCalls: any[] = msg.tool_calls || [];
+
+		if (content) {
+			callbacks.onToken(content);
 		}
-
-		const reader = response.body?.getReader();
-		if (!reader) throw new Error("无法获取响应流");
-
-		const decoder = new TextDecoder();
-		let buffer = "";
-		let content = "";
-
-		const toolCallsMap = new Map<
-			number,
-			{ id: string; type: string; function: { name: string; arguments: string } }
-		>();
-
-		while (true) {
-			const { done, value } = await reader.read();
-			if (done) break;
-
-			buffer += decoder.decode(value, { stream: true });
-			const lines = buffer.split("\n");
-			buffer = lines.pop() || "";
-
-			for (const line of lines) {
-				const trimmed = line.trim();
-				if (!trimmed || trimmed === "data: [DONE]") continue;
-				if (!trimmed.startsWith("data: ")) continue;
-
-				try {
-					const data = JSON.parse(trimmed.slice(6));
-					const delta = data.choices?.[0]?.delta;
-
-					if (!delta) continue;
-
-					if (delta.content) {
-						content += delta.content;
-						callbacks.onToken(delta.content);
-					}
-
-					if (delta.tool_calls) {
-						for (const tc of delta.tool_calls) {
-							const idx = tc.index ?? 0;
-							if (!toolCallsMap.has(idx)) {
-								toolCallsMap.set(idx, {
-									id: "",
-									type: "function",
-									function: { name: "", arguments: "" },
-								});
-							}
-							const existing = toolCallsMap.get(idx)!;
-							if (tc.id) existing.id += tc.id;
-							if (tc.function?.name)
-								existing.function.name += tc.function.name;
-							if (tc.function?.arguments)
-								existing.function.arguments += tc.function.arguments;
-						}
-					}
-				} catch {
-					continue;
-				}
-			}
-		}
-
-		const toolCalls = Array.from(toolCallsMap.values()).filter((tc) => tc.id);
 
 		this.abortController = null;
 		return { content, toolCalls };
@@ -294,8 +230,8 @@ export class AgentCore {
 						name: toolCall.function.name,
 					});
 				}
-			} catch (e: any) {
-				const errorMsg = `请求失败: ${e.message}`;
+			} catch (e: unknown) {
+				const errorMsg = `请求失败: ${e instanceof Error ? e.message : String(e)}`;
 				this.history.push({ role: "assistant", content: errorMsg });
 				callbacks.onError(errorMsg);
 				return;
