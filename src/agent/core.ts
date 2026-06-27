@@ -114,7 +114,7 @@ export class AgentCore {
 				for (const toolCall of result.toolCalls) {
 					let args: Record<string, unknown> = {};
 					try {
-						const parsed = JSON.parse(toolCall.function.arguments);
+						const parsed: unknown = JSON.parse(toolCall.function.arguments);
 						args = (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed))
 							? parsed as Record<string, unknown>
 							: {};
@@ -236,7 +236,7 @@ export class AgentCore {
 				for (const toolCall of result.toolCalls) {
 					let args: Record<string, unknown> = {};
 					try {
-						const parsed = JSON.parse(toolCall.function.arguments);
+						const parsed: unknown = JSON.parse(toolCall.function.arguments);
 						args = (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed))
 							? parsed as Record<string, unknown>
 							: {};
