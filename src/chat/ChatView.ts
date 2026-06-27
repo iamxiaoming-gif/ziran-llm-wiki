@@ -298,7 +298,7 @@ export class ChatView extends ItemView {
 		} catch { /* ignore */ }
 	}
 
-	private async loadChatHistory() {
+		private async loadChatHistory() {
 		try {
 			const path = normalizePath(`${this.plugin.settings.memoryFolder}/对话历史.json`);
 			const file = this.app.vault.getAbstractFileByPath(path);
@@ -315,6 +315,7 @@ export class ChatView extends ItemView {
 					void this.addUserMessage(msg.content);
 				} else if (msg.role === "assistant" && !msg.tool_calls) {
 					this.addAssistantMessage(msg.content);
+					this.updateAssistantMessage(msg.content);
 					this.finalizeAssistantMessage();
 				}
 			}
