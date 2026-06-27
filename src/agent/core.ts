@@ -171,7 +171,6 @@ export class AgentCore {
 			callbacks.onToken(content);
 		}
 
-		this.abortController = null;
 		return { content, toolCalls };
 	}
 

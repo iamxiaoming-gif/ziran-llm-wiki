@@ -310,7 +310,7 @@ export class ChatView extends ItemView {
 			this.plugin.agentCore?.setHistory(data.messages || []);
 			for (const msg of data.messages || []) {
 				if (msg.role === "user") {
-					this.addUserMessage(msg.content);
+					void this.addUserMessage(msg.content);
 				} else if (msg.role === "assistant" && !msg.tool_calls) {
 					this.addAssistantMessage(msg.content);
 					this.finalizeAssistantMessage();
