@@ -13,6 +13,7 @@ import { FeynmanEvaluationService } from "./feynman/FeynmanEvaluationService";
 import { FeynmanSessionService } from "./feynman/FeynmanSessionService";
 import { FeynmanView, VIEW_TYPE_FEYNMAN } from "./feynman/FeynmanView";
 import { BackgroundIngestionService, type BackgroundIngestionSnapshot } from "./services/BackgroundIngestionService";
+import { IngestionBatchService } from "./services/IngestionBatchService";
 import { buildSystemPrompt } from "./agent/prompts";
 
 export { ensureSettings } from "./settings";
@@ -29,6 +30,7 @@ export default class LLMWikiPlugin extends Plugin {
 	feynmanEvaluationService!: FeynmanEvaluationService;
 	feynmanSessionService!: FeynmanSessionService;
 	backgroundIngestionService!: BackgroundIngestionService;
+	ingestionService!: IngestionBatchService;
 	private batchStatusBarEl: HTMLElement | null = null;
 	private unsubscribeBatchStatus: (() => void) | null = null;
 	private currentSystemPrompt = "";
@@ -36,7 +38,8 @@ export default class LLMWikiPlugin extends Plugin {
 	async onload() {
 		await this.loadSettings();
 
-		this.toolRegistry = new ToolRegistry(this.app, this.settings);
+		this.ingestionService = new IngestionBatchService(this.app, this.settings);
+		this.toolRegistry = new ToolRegistry(this.app, this.settings, this.ingestionService);
 		this.memoryService = new MemoryService(this.app, this.settings);
 		this.contextManager = new ContextManager();
 		this.historySanitizer = new HistorySanitizer();
@@ -53,7 +56,7 @@ export default class LLMWikiPlugin extends Plugin {
 			agent.init(this.currentSystemPrompt);
 			return agent;
 		};
-		this.backgroundIngestionService = new BackgroundIngestionService(this.app, this.settings, this.toolRegistry, agentFactory);
+		this.backgroundIngestionService = new BackgroundIngestionService(this.app, this.settings, this.toolRegistry, agentFactory, this.ingestionService);
 		this.toolRegistry.setBackgroundIngestionService(this.backgroundIngestionService);
 		// 后台批次状态改为异步恢复，不再阻塞 Obsidian 启动
 		void this.backgroundIngestionService.init().catch((error: unknown) => {

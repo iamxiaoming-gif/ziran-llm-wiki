@@ -39,10 +39,10 @@ export class ToolRegistry {
 	private userTurn = 0;
 	private batchPlannedAtTurn = new Map<string, number>();
 
-	constructor(app: App, settings: LLMWikiSettings) {
+	constructor(app: App, settings: LLMWikiSettings, ingestionService?: IngestionBatchService) {
 		this.app = app;
 		this.settings = settings;
-		this.ingestionService = new IngestionBatchService(app, settings);
+		this.ingestionService = ingestionService ?? new IngestionBatchService(app, settings);
 		this.registerAllTools();
 	}
 
@@ -78,6 +78,71 @@ export class ToolRegistry {
 			}
 		}
 		return result;
+	}
+
+	/**
+	 * 在知识库总索引中添加一条知识点条目，并同步分类计数与知识点总数。
+	 * 兼容全角/半角括号；分类不存在时自动新建分类区块，绝不静默跳过。
+	 */
+	private async addIndexEntry(
+		basePath: string,
+		category: string,
+		title: string,
+		maturityEmoji: string,
+		description: string
+	): Promise<{ added: boolean; message: string }> {
+		const indexPath = `${basePath}/20-知识索引/知识库总索引.md`;
+		const indexFile = this.app.vault.getAbstractFileByPath(normalizePath(indexPath));
+		if (!(indexFile instanceof TFile)) {
+			return { added: false, message: `索引文件不存在: ${indexPath}` };
+		}
+
+		const indexContent = await this.app.vault.read(indexFile);
+		const escCategory = category.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+		// 分类区块形如：### 1. 核心概念（2个）🟡，括号可能为全角或半角
+		const categoryPattern = new RegExp(`###\\s+\\d+\\.\\s+${escCategory}\\s*[（(]\\d+个[）)]`);
+		const match = indexContent.match(categoryPattern);
+		const newEntry = `- [[${title}]] ${maturityEmoji} - ${description || "待补充"}`;
+		let updatedContent: string;
+
+		if (match) {
+			const categoryStart = indexContent.indexOf(match[0]);
+			const nextCategoryStart = indexContent.indexOf("\n### ", categoryStart + 1);
+			const endPos = nextCategoryStart === -1 ? indexContent.indexOf("\n---", categoryStart) : nextCategoryStart;
+			const categorySection = indexContent.substring(categoryStart, endPos);
+			const countMatch = categorySection.match(/[（(](\d+)个[）)]/);
+			const currentCount = countMatch ? parseInt(countMatch[1]) : 0;
+			const countToken = countMatch ? countMatch[0] : `（${currentCount}个）`;
+			const updatedSection = categorySection
+				.replace(countToken, countToken.replace(/\d+/, String(currentCount + 1)))
+				.replace(/（暂无知识点）\s*/, "");
+			updatedContent =
+				indexContent.substring(0, categoryStart) +
+				updatedSection.trimEnd() +
+				"\n" + newEntry + "\n" +
+				indexContent.substring(endPos);
+		} else {
+			// 分类区块不存在：在"知识点分类索引"区域末尾（--- 分隔线前）追加新分类
+			const sectionStart = indexContent.indexOf("## 一、知识点分类索引");
+			const searchFrom = sectionStart >= 0 ? sectionStart : 0;
+			const sectionEnd = indexContent.indexOf("\n---", searchFrom);
+			const insertPos = sectionEnd === -1 ? indexContent.length : sectionEnd;
+			const categoryCount = (indexContent.substring(searchFrom, insertPos).match(/###\s+\d+\./g) || []).length;
+			const newSection = `### ${categoryCount + 1}. ${category}（1个）🟡\n\n${newEntry}\n`;
+			updatedContent =
+				indexContent.substring(0, insertPos) +
+				"\n" + newSection +
+				indexContent.substring(insertPos);
+		}
+
+		const totalMatch = updatedContent.match(/知识点总数：(\d+)个/);
+		if (totalMatch) {
+			const newTotal = parseInt(totalMatch[1]) + 1;
+			updatedContent = updatedContent.replace(`知识点总数：${totalMatch[1]}个`, `知识点总数：${newTotal}个`);
+		}
+
+		await this.app.vault.modify(indexFile, updatedContent);
+		return { added: true, message: `已更新总索引：${category} / ${title}` };
 	}
 
 	updateSettings(settings: LLMWikiSettings) {
@@ -1034,53 +1099,28 @@ export class ToolRegistry {
 					const indexCategory = a.entry_category || category;
 
 					// 1. 更新总索引
-					const indexPath = `${basePath}/20-知识索引/知识库总索引.md`;
-					const indexFile = this.app.vault.getAbstractFileByPath(normalizePath(indexPath));
-					if (indexFile && indexFile instanceof TFile) {
-						const indexContent = await this.app.vault.read(indexFile);
-						const escCategory = indexCategory.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-						const categoryPattern = new RegExp(`###\\s+\\d+\\.\\s+${escCategory}\\s*\\(\\d+个\\)`);
-						const match = indexContent.match(categoryPattern);
-						if (match) {
-							const categoryStart = indexContent.indexOf(match[0]);
-							const nextCategoryStart = indexContent.indexOf("\n### ", categoryStart + 1);
-							const endPos = nextCategoryStart === -1 ? indexContent.indexOf("\n---", categoryStart) : nextCategoryStart;
-							const categorySection = indexContent.substring(categoryStart, endPos);
-							const countMatch = categorySection.match(/\((\d+)个\)/);
-							const currentCount = countMatch ? parseInt(countMatch[1]) : 0;
-							const updatedSection = categorySection.replace(`(${currentCount}个)`, `(${currentCount + 1}个)`).replace(/（暂无知识点）/, "");
-							const newEntry = `- [[${a.title}]] ${maturityEmoji} - ${a.entry_description || "待补充"}`;
-							const updatedContent = indexContent.substring(0, categoryStart) + updatedSection.trimEnd() + "\n" + newEntry + "\n" + indexContent.substring(endPos);
-							await this.app.vault.modify(indexFile, updatedContent);
+					const indexResult = await this.addIndexEntry(basePath, indexCategory, a.title, maturityEmoji, a.entry_description);
 
-							const totalMatch = updatedContent.match(/知识点总数：(\d+)个/);
-							if (totalMatch) {
-								const newTotal = parseInt(totalMatch[1]) + 1;
-								await this.app.vault.modify(indexFile, updatedContent.replace(`知识点总数：${totalMatch[1]}个`, `知识点总数：${newTotal}个`));
-							}
-						}
-
-						if (a.keywords) {
-							const keywordPath = `${basePath}/20-知识索引/关键词索引.md`;
-							const keywordFile = this.app.vault.getAbstractFileByPath(normalizePath(keywordPath));
-							if (keywordFile && keywordFile instanceof TFile) {
-								let kwContent = await this.app.vault.read(keywordFile);
-								const newKeywords = a.keywords.split(",").map((k) => k.trim()).filter(Boolean);
-								for (const kw of newKeywords) {
-									const kwRegex = new RegExp(`\\|\\s*${kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\|\\s*\\[\\[([^\\]]+)\\]\\]\\s*\\|\\s*(\\d+)\\s*\\|`);
-									const match = kwContent.match(kwRegex);
-									if (match) {
-										const existingPages = match[1];
-										const existingCount = parseInt(match[2]);
-										const newPages = existingPages.includes(a.title) ? existingPages : `${existingPages}, [[${a.title}]]`;
-										kwContent = kwContent.replace(match[0], `| ${kw} | ${newPages} | ${existingCount + 1} |`);
-									} else {
-										kwContent = kwContent.replace("（暂无关键词）", `| ${kw} | [[${a.title}]] | 1 |\n（暂无关键词）`);
-									}
+					if (a.keywords) {
+						const keywordPath = `${basePath}/20-知识索引/关键词索引.md`;
+						const keywordFile = this.app.vault.getAbstractFileByPath(normalizePath(keywordPath));
+						if (keywordFile && keywordFile instanceof TFile) {
+							let kwContent = await this.app.vault.read(keywordFile);
+							const newKeywords = a.keywords.split(",").map((k) => k.trim()).filter(Boolean);
+							for (const kw of newKeywords) {
+								const kwRegex = new RegExp(`\\|\\s*${kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\|\\s*\\[\\[([^\\]]+)\\]\\]\\s*\\|\\s*(\\d+)\\s*\\|`);
+								const match = kwContent.match(kwRegex);
+								if (match) {
+									const existingPages = match[1];
+									const existingCount = parseInt(match[2]);
+									const newPages = existingPages.includes(a.title) ? existingPages : `${existingPages}, [[${a.title}]]`;
+									kwContent = kwContent.replace(match[0], `| ${kw} | ${newPages} | ${existingCount + 1} |`);
+								} else {
+									kwContent = kwContent.replace("（暂无关键词）", `| ${kw} | [[${a.title}]] | 1 |\n（暂无关键词）`);
 								}
-								kwContent = kwContent.replace("\n（暂无关键词）", "").replace("（暂无关键词）", "");
-								await this.app.vault.modify(keywordFile, kwContent);
 							}
+							kwContent = kwContent.replace("\n（暂无关键词）", "").replace("（暂无关键词）", "");
+							await this.app.vault.modify(keywordFile, kwContent);
 						}
 					}
 
@@ -1126,7 +1166,7 @@ export class ToolRegistry {
 
 					return {
 						success: true,
-						content: `一站式操作完成！\n1. ✅ 页面已创建: ${filePath}（含 YAML frontmatter）\n2. ✅ 总索引已更新: ${indexCategory} +1\n3. ✅ 关系图谱已更新\n4. ✅ 已有页面入链: ${backlinkCount} 个\n5. ✅ 内嵌更新日志已追加\n6. ✅ AGENTS.md 已同步\n7. ✅ 集中更新日志已追加`,
+						content: `一站式操作完成！\n1. ✅ 页面已创建: ${filePath}（含 YAML frontmatter）\n2. ${indexResult.added ? "✅" : "⚠️"} 总索引: ${indexResult.message}\n3. ✅ 关系图谱已更新\n4. ✅ 已有页面入链: ${backlinkCount} 个\n5. ✅ 内嵌更新日志已追加\n6. ✅ AGENTS.md 已同步\n7. ✅ 集中更新日志已追加`,
 					};
 				} catch (e: unknown) {
 					return { success: false, content: `一站式创建失败: ${this.getErrorMessage(e)}` };
@@ -1468,50 +1508,8 @@ export class ToolRegistry {
 					}
 
 					if (a.action === "add_entry" && a.entry_name && a.entry_category) {
-						const indexContent = await this.app.vault.read(indexFile);
-						const categoryHeader = a.entry_category;
-						const categoryPattern = new RegExp(
-							`###\\s+\\d+\\.\\s+${categoryHeader.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\(\\d+个\\)`
-						);
-						const match = indexContent.match(categoryPattern);
-
-						if (match) {
-							const categoryStart = indexContent.indexOf(match[0]);
-							const nextCategoryStart = indexContent.indexOf("\n### ", categoryStart + 1);
-							const endPos = nextCategoryStart === -1 ? indexContent.indexOf("\n---", categoryStart) : nextCategoryStart;
-
-							const categorySection = indexContent.substring(categoryStart, endPos);
-							const countMatch = categorySection.match(/\((\d+)个\)/);
-							const currentCount = countMatch ? parseInt(countMatch[1]) : 0;
-							const newCount = currentCount + 1;
-
-							const updatedSection = categorySection
-								.replace(`(${currentCount}个)`, `(${newCount}个)`)
-								.replace(/（暂无知识点）/, "");
-
-							const maturity = a.entry_maturity || "🟡";
-							const newEntry = `- [[${a.entry_name}]] ${maturity} - ${a.entry_description || "待补充"}`;
-
-							const updatedContent =
-								indexContent.substring(0, categoryStart) +
-								updatedSection.trimEnd() +
-								"\n" +
-								newEntry +
-								"\n" +
-								indexContent.substring(endPos);
-
-							await this.app.vault.modify(indexFile, updatedContent);
-
-							const totalMatch = updatedContent.match(/知识点总数：(\d+)个/);
-							if (totalMatch) {
-								const newTotal = parseInt(totalMatch[1]) + 1;
-								const finalContent = updatedContent.replace(
-									`知识点总数：${totalMatch[1]}个`,
-									`知识点总数：${newTotal}个`
-								);
-								await this.app.vault.modify(indexFile, finalContent);
-							}
-						}
+						const maturity = a.entry_maturity || "🟡";
+						const indexResult = await this.addIndexEntry(basePath, a.entry_category, a.entry_name, maturity, a.entry_description);
 
 						if (a.keywords) {
 							const keywordPath = `${basePath}/20-知识索引/关键词索引.md`;
@@ -1530,7 +1528,7 @@ export class ToolRegistry {
 							}
 						}
 
-						return { success: true, content: `索引已更新：添加 ${a.entry_name} 到 ${a.entry_category}` };
+						return { success: true, content: `索引已更新：添加 ${a.entry_name} 到 ${a.entry_category}（${indexResult.message}）` };
 					}
 
 					if (a.action === "refresh_all") {

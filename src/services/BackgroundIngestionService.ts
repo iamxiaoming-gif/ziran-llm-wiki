@@ -33,9 +33,10 @@ export class BackgroundIngestionService {
 		private app: App,
 		private settings: LLMWikiSettings,
 		private toolRegistry: ToolRegistry,
-		private agentFactory: AgentFactory
+		private agentFactory: AgentFactory,
+		batchService?: IngestionBatchService
 	) {
-		this.batchService = new IngestionBatchService(app, settings);
+		this.batchService = batchService ?? new IngestionBatchService(app, settings);
 	}
 
 	async init(): Promise<void> {
@@ -165,41 +166,51 @@ export class BackgroundIngestionService {
 
 	async getSnapshot(batchId = ""): Promise<BackgroundIngestionSnapshot> {
 		try {
-			const status = await this.batchService.getStatus(batchId);
-			const snapshot = this.snapshotFromBatch(status.batch);
-			if (!this.runningBatchId) {
-				if (snapshot.status === "active" || snapshot.status === "stopping") {
-					snapshot.status = "paused";
-					snapshot.message = snapshot.message || "批次状态已恢复为暂停";
-				}
-				if (snapshot.status === "paused" && !batchId) {
-					return {
-						batchId: "",
-						status: "completed",
-						currentFile: "",
-						totals: { pending: 0, processing: 0, completed: 0, failed: 0, skipped: 0 },
-						createdPages: 0,
-						updatedPages: 0,
-						processedThisRun: 0,
-						message: "",
-						updatedAt: new Date().toISOString(),
-					};
-				}
-			}
-			return snapshot;
+			return await this.snapshotFor(batchId);
 		} catch {
-			return {
-				batchId: batchId || "",
-				status: "completed",
-				currentFile: "",
-				totals: { pending: 0, processing: 0, completed: 0, failed: 0, skipped: 0 },
-				createdPages: 0,
-				updatedPages: 0,
-				processedThisRun: 0,
-				message: "",
-				updatedAt: new Date().toISOString(),
-			};
+			// 缓存可能与磁盘不一致（例如批次刚由聊天工具创建），先重读磁盘再试一次
+			try {
+				this.batchService.reload();
+				return await this.snapshotFor(batchId);
+			} catch {
+				return {
+					batchId: batchId || "",
+					status: this.runningBatchId ? "active" : "paused",
+					currentFile: "",
+					totals: { pending: 0, processing: 0, completed: 0, failed: 0, skipped: 0 },
+					createdPages: 0,
+					updatedPages: 0,
+					processedThisRun: this.processedThisRun,
+					message: "批次状态不可用，请检查摄取任务文件",
+					updatedAt: new Date().toISOString(),
+				};
+			}
 		}
+	}
+
+	private async snapshotFor(batchId: string): Promise<BackgroundIngestionSnapshot> {
+		const status = await this.batchService.getStatus(batchId);
+		const snapshot = this.snapshotFromBatch(status.batch);
+		if (!this.runningBatchId) {
+			if (snapshot.status === "active" || snapshot.status === "stopping") {
+				snapshot.status = "paused";
+				snapshot.message = snapshot.message || "批次状态已恢复为暂停";
+			}
+			if (snapshot.status === "paused" && !batchId) {
+				return {
+					batchId: "",
+					status: "completed",
+					currentFile: "",
+					totals: { pending: 0, processing: 0, completed: 0, failed: 0, skipped: 0 },
+					createdPages: 0,
+					updatedPages: 0,
+					processedThisRun: 0,
+					message: "",
+					updatedAt: new Date().toISOString(),
+				};
+			}
+		}
+		return snapshot;
 	}
 
 	formatSummary(snapshot: BackgroundIngestionSnapshot): string {

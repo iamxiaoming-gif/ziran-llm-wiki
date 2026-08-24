@@ -337,7 +337,7 @@ export class AgentCore {
 				return this.readResponse(response.json as ChatCompletionResponse);
 			} catch (error: unknown) {
 				const status = typeof error === "object" && error !== null && "status" in error
-					? Number((error as { status: unknown }).status)
+					? Number((error as Record<string, unknown>).status)
 					: 0;
 				if ((status >= 400 && status < 500) || attempt === maxRetries) throw error;
 				await new Promise((resolve) => window.setTimeout(resolve, 1000 * (attempt + 1)));

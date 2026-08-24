@@ -44,7 +44,7 @@ export class ProviderAdapter {
 
 	private statusFromError(error: unknown): number {
 		if (typeof error === "object" && error !== null && "status" in error) {
-			return Number((error as { status: unknown }).status) || 0;
+			return Number((error as Record<string, unknown>).status) || 0;
 		}
 		const message = error instanceof Error ? error.message : String(error);
 		const match = message.match(/\((\d{3})\)/);

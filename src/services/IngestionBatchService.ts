@@ -78,8 +78,15 @@ export class IngestionBatchService {
 		this.settings = settings;
 	}
 
+	/** 丢弃内存缓存，下次操作时重新从磁盘读取最新状态 */
+	reload(): void {
+		this.storeCache = null;
+		this.storeLoadPromise = null;
+	}
+
 	async recoverOrphanedBatches(): Promise<void> {
 		try {
+			this.reload();
 			const store = await this.loadStore();
 			let dirty = false;
 			for (const batch of Object.values(store.batches)) {
