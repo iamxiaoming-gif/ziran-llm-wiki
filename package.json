@@ -1,6 +1,6 @@
 {
   "name": "ziran-llm-wiki",
-  "version": "0.6.6",
+  "version": "0.6.7",
   "description": "Build and verify knowledge through conversational AI and evidence-based Feynman learning.",
   "main": "main.js",
   "scripts": {

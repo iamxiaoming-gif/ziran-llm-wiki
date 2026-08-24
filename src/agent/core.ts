@@ -256,7 +256,7 @@ export class AgentCore {
 			const chunk = text.slice(i, i + chunkSize);
 			callbacks.onToken(chunk);
 			if (i + chunkSize < text.length) {
-				await new Promise((resolve) => globalThis.setTimeout(resolve, delayMs));
+				await new Promise((resolve) => window.setTimeout(resolve, delayMs));
 			}
 		}
 	}
@@ -340,7 +340,7 @@ export class AgentCore {
 					? Number((error as { status: unknown }).status)
 					: 0;
 				if ((status >= 400 && status < 500) || attempt === maxRetries) throw error;
-				await new Promise((resolve) => globalThis.setTimeout(resolve, 1000 * (attempt + 1)));
+				await new Promise((resolve) => window.setTimeout(resolve, 1000 * (attempt + 1)));
 			}
 		}
 		throw new Error("API 调用失败（已重试）");

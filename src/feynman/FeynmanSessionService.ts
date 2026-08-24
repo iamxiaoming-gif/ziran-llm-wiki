@@ -148,7 +148,7 @@ export class FeynmanSessionService {
 	}
 
 	private safeName(value: string): string {
-		return value.replace(/[\\/:*?\"<>|#\[\]]/g, "-").replace(/\s+/g, " ").trim().slice(0, 60) || "未命名主题";
+		return value.replace(/[\\/:*?"<>|#[\]]/g, "-").replace(/\s+/g, " ").trim().slice(0, 60) || "未命名主题";
 	}
 
 	private audioExtension(audio: RecordedAudio): string {
@@ -165,6 +165,6 @@ export class FeynmanSessionService {
 	}
 
 	private async bestEffortDelete(file: TFile): Promise<void> {
-		try { await this.app.vault.delete(file); } catch { /* preserve the original save error */ }
+		try { await this.app.fileManager.trashFile(file); } catch { /* preserve the original save error */ }
 	}
 }

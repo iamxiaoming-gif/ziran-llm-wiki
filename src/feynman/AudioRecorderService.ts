@@ -8,9 +8,10 @@ export class AudioRecorderService {
 	private autoStopTimer: number | null = null;
 	private autoStopHandler: (() => void) | null = null;
 
-	isSupported(): boolean {
+	isSupported(this: void): boolean {
 		return typeof navigator !== "undefined"
-			&& Boolean(navigator.mediaDevices?.getUserMedia)
+			&& typeof navigator.mediaDevices !== "undefined"
+			&& "getUserMedia" in navigator.mediaDevices
 			&& typeof MediaRecorder !== "undefined";
 	}
 
@@ -58,7 +59,7 @@ export class AudioRecorderService {
 					const blob = new Blob(this.chunks, { type: mimeType });
 					resolve({ blob, mimeType, durationSeconds: Math.max(1, Math.round((Date.now() - this.startedAt) / 1000)) });
 				} catch (error) {
-					reject(error);
+					reject(error instanceof Error ? error : new Error(String(error)));
 				} finally {
 					this.cleanup();
 				}

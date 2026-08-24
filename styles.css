@@ -443,7 +443,7 @@
 	background: var(--accent);
 	border-radius: 2px;
 	transition: width 0.3s ease;
-	width: 0%;
+	width: var(--llm-wiki-progress, 0%);
 }
 
 .llm-wiki-progress-text {

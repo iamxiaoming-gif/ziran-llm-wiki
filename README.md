@@ -19,10 +19,6 @@ Build deep topic knowledge bases through conversational AI, based on Karpathy's 
 - **Multiple themes** — Dark Blue, Warm Light, Obsidian Red, Lavender, Forest Green
 - **Privacy-aware** — raw materials are read-only, page content is append-only, and audio retention is off by default
 
-## Screenshots
-
-<!-- TODO: add real screenshots of the chat view, batch ingestion plan, and Feynman view -->
-
 ## Requirements
 
 - Obsidian **v1.8.0+** (desktop)

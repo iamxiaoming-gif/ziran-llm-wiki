@@ -393,7 +393,7 @@ export class IngestionBatchService {
 				return;
 			}
 			for (const child of entry.children) {
-				if (child instanceof TFile || child instanceof TFolder) visit(child as TFile | TFolder);
+				if (child instanceof TFile || child instanceof TFolder) visit(child);
 			}
 		};
 
@@ -418,7 +418,7 @@ export class IngestionBatchService {
 			if (!entry || (!(entry instanceof TFile) && !(entry instanceof TFolder))) {
 				throw new Error(`路径不存在: ${path}`);
 			}
-			visit(entry as TFile | TFolder);
+			visit(entry);
 		}
 
 		return [...results.values()].sort((left, right) => left.path.localeCompare(right.path, "zh-CN"));

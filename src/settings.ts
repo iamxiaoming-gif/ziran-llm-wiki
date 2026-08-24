@@ -259,9 +259,7 @@ export class LLMWikiSettingTab extends PluginSettingTab {
 			fn();
 		} catch (e: unknown) {
 			const msg = e instanceof Error ? e.message : String(e);
-			containerEl.createEl("h3", {
-				text: `⚠️ 区块「${name}」渲染失败: ${msg}`,
-			});
+			new Setting(containerEl).setName(`⚠️ 区块「${name}」渲染失败: ${msg}`).setHeading();
 			new Notice(`LLM Wiki 设置出错 [${name}]: ${msg}`, 8000);
 		}
 	}
@@ -435,13 +433,17 @@ export class LLMWikiSettingTab extends PluginSettingTab {
 			.setName("检测连接")
 			.setDesc("测试当前 API Key 和模型是否可用")
 			.addButton((btn) =>
-				btn.setButtonText("检测").onClick(async () => {
-					btn.setButtonText("检测中...");
-					btn.setDisabled(true);
-					const result = await this.testConnection();
-					btn.setDisabled(false);
-					btn.setButtonText(result);
-					window.setTimeout(() => btn.setButtonText("检测"), 4000);
+				btn.setButtonText("检测").onClick(() => {
+					void (async () => {
+						btn.setButtonText("检测中...");
+						btn.setDisabled(true);
+						const result = await this.testConnection();
+						btn.setDisabled(false);
+						btn.setButtonText(result);
+						window.setTimeout(() => {
+							btn.setButtonText("检测");
+						}, 4000);
+					})();
 				})
 			);
 	}
@@ -541,19 +543,23 @@ export class LLMWikiSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("检测转写配置")
 			.setDesc("检查当前供应商地址与凭据；正式音频识别请在费曼学习中使用录音测试")
-			.addButton((button) => button.setButtonText("检测").onClick(async () => {
-				button.setDisabled(true).setButtonText("检测中…");
-				try {
-					const result = await this.plugin.transcriptionService.testConnection();
-					button.setButtonText(result.status === "connected" ? "连接成功" : result.status === "reachable" ? "服务可访问" : "配置完整");
-					new Notice(result.message, 7000);
-				} catch (error: unknown) {
-					button.setButtonText("失败");
-					new Notice(error instanceof Error ? error.message : String(error), 6000);
-				} finally {
-					button.setDisabled(false);
-					window.setTimeout(() => button.setButtonText("检测"), 4000);
-				}
+			.addButton((button) => button.setButtonText("检测").onClick(() => {
+				void (async () => {
+					button.setDisabled(true).setButtonText("检测中…");
+					try {
+						const result = await this.plugin.transcriptionService.testConnection();
+						button.setButtonText(result.status === "connected" ? "连接成功" : result.status === "reachable" ? "服务可访问" : "配置完整");
+						new Notice(result.message, 7000);
+					} catch (error: unknown) {
+						button.setButtonText("失败");
+						new Notice(error instanceof Error ? error.message : String(error), 6000);
+					} finally {
+						button.setDisabled(false);
+						window.setTimeout(() => {
+							button.setButtonText("检测");
+						}, 4000);
+					}
+				})();
 			}));
 
 		new Setting(containerEl).setName("隐私与学习记录").setHeading();
@@ -718,10 +724,12 @@ export class LLMWikiSettingTab extends PluginSettingTab {
 			const copy = card.createDiv();
 			copy.createEl("strong", { text: THEME_OPTIONS[theme] });
 			copy.createEl("small", { text: descriptions[theme] });
-			card.addEventListener("click", async () => {
-				this.plugin.settings.theme = theme;
-				await this.plugin.saveSettings();
-				this.display();
+			card.addEventListener("click", () => {
+				void (async () => {
+					this.plugin.settings.theme = theme;
+					await this.plugin.saveSettings();
+					this.display();
+				})();
 			});
 		}
 	}

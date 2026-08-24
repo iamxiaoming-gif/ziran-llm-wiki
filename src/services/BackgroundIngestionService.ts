@@ -1,4 +1,4 @@
-import { App, normalizePath, TFile } from "obsidian";
+import { App } from "obsidian";
 import type { LLMWikiSettings } from "../settings";
 import type { ToolRegistry } from "../agent/tools";
 import type { AgentCore, ChatMessage } from "../agent/core";

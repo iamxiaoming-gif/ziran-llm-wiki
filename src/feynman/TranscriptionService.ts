@@ -153,7 +153,7 @@ export class TranscriptionService {
 		const encoder = new TextEncoder();
 		const chunks: Uint8Array[] = [];
 		const addText = (value: string) => chunks.push(encoder.encode(value));
-		const safeFilename = filename.replace(/[\r\n\"]/g, "_");
+		const safeFilename = filename.replace(/[\r\n"]/g, "_");
 		addText(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${safeFilename}"\r\nContent-Type: ${audio.type || "application/octet-stream"}\r\n\r\n`);
 		chunks.push(new Uint8Array(await audio.arrayBuffer()));
 		addText("\r\n");

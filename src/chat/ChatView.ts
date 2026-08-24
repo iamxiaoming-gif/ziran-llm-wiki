@@ -94,15 +94,15 @@ export class ChatView extends ItemView {
 
 	private buildUI(container: HTMLElement) {
 
-		const chatHeader = container.createEl("div", { cls: "llm-wiki-chat-header" });
+		const chatHeader = container.createDiv( { cls: "llm-wiki-chat-header" });
 		chatHeader.createEl("h3", { text: "💬 LLM Wiki 知识库助手" });
 
-		this.modelInfoEl = chatHeader.createEl("span", { cls: "llm-wiki-model-info" });
-		this.contextInfoEl = chatHeader.createEl("span", { cls: "llm-wiki-context-info" });
+		this.modelInfoEl = chatHeader.createSpan( { cls: "llm-wiki-model-info" });
+		this.contextInfoEl = chatHeader.createSpan( { cls: "llm-wiki-context-info" });
 		this.updateModelInfo();
 		this.updateContextInfo();
 
-		const headerActions = chatHeader.createEl("div", { cls: "llm-wiki-header-actions" });
+		const headerActions = chatHeader.createDiv( { cls: "llm-wiki-header-actions" });
 		const feynmanBtn = headerActions.createEl("button", { text: "🎓 费曼学习", cls: "llm-wiki-btn llm-wiki-btn-sm" });
 		feynmanBtn.addEventListener("click", () => void this.plugin.activateFeynmanView());
 		
@@ -115,7 +115,7 @@ export class ChatView extends ItemView {
 		this.batchProgressEl = container.createDiv({ cls: "llm-wiki-batch-progress llm-wiki-hidden" });
 		const batchInfo = this.batchProgressEl.createDiv({ cls: "llm-wiki-batch-progress-info" });
 		this.batchProgressTitleEl = batchInfo.createEl("strong", { text: "后台摄取" });
-		this.batchProgressDetailEl = batchInfo.createEl("span", { text: "等待任务" });
+		this.batchProgressDetailEl = batchInfo.createSpan( { text: "等待任务" });
 		const batchTrack = this.batchProgressEl.createDiv({ cls: "llm-wiki-batch-progress-track" });
 		this.batchProgressBarEl = batchTrack.createDiv({ cls: "llm-wiki-batch-progress-bar" });
 		const batchActions = this.batchProgressEl.createDiv({ cls: "llm-wiki-batch-progress-actions" });
@@ -129,22 +129,22 @@ export class ChatView extends ItemView {
 		this.batchResumeBtn = batchActions.createEl("button", { text: "继续", cls: "llm-wiki-btn llm-wiki-btn-sm llm-wiki-btn-primary" });
 		this.batchResumeBtn.addEventListener("click", () => void this.plugin.backgroundIngestionService.resume());
 
-		this.messagesEl = container.createEl("div", { cls: "llm-wiki-messages" });
+		this.messagesEl = container.createDiv( { cls: "llm-wiki-messages" });
 
-		this.operationHistoryEl = container.createEl("div", { cls: "llm-wiki-operation-history llm-wiki-hidden" });
-		const historyHeader = this.operationHistoryEl.createEl("div", { cls: "llm-wiki-history-header" });
-		historyHeader.createEl("span", { text: "📋 操作历史" });
+		this.operationHistoryEl = container.createDiv( { cls: "llm-wiki-operation-history llm-wiki-hidden" });
+		const historyHeader = this.operationHistoryEl.createDiv( { cls: "llm-wiki-history-header" });
+		historyHeader.createSpan( { text: "📋 操作历史" });
 		const closeHistoryBtn = historyHeader.createEl("button", { text: "关闭", cls: "llm-wiki-btn llm-wiki-btn-sm" });
 		closeHistoryBtn.addEventListener("click", () => this.toggleOperationHistory());
 		const clearHistoryBtn = historyHeader.createEl("button", { text: "清空", cls: "llm-wiki-btn llm-wiki-btn-sm" });
 		clearHistoryBtn.addEventListener("click", () => this.clearOperationHistory());
-		this.operationHistoryListEl = this.operationHistoryEl.createEl("div", { cls: "llm-wiki-history-list" });
+		this.operationHistoryListEl = this.operationHistoryEl.createDiv( { cls: "llm-wiki-history-list" });
 
-		const progressContainer = container.createEl("div", { cls: "llm-wiki-progress-container llm-wiki-hidden" });
-		this.progressBarEl = progressContainer.createEl("div", { cls: "llm-wiki-progress-bar" });
-		this.progressTextEl = progressContainer.createEl("div", { cls: "llm-wiki-progress-text", text: "就绪" });
+		const progressContainer = container.createDiv( { cls: "llm-wiki-progress-container llm-wiki-hidden" });
+		this.progressBarEl = progressContainer.createDiv( { cls: "llm-wiki-progress-bar" });
+		this.progressTextEl = progressContainer.createDiv( { cls: "llm-wiki-progress-text", text: "就绪" });
 
-		const inputContainer = container.createEl("div", { cls: "llm-wiki-input-container" });
+		const inputContainer = container.createDiv( { cls: "llm-wiki-input-container" });
 
 		this.inputEl = inputContainer.createEl("textarea", {
 			cls: "llm-wiki-input",
@@ -161,7 +161,7 @@ export class ChatView extends ItemView {
 			}
 		});
 
-		const hintsEl = inputContainer.createEl("div", { cls: "llm-wiki-hints" });
+		const hintsEl = inputContainer.createDiv( { cls: "llm-wiki-hints" });
 		const hints = [
 			{ text: "初始化知识库", tip: "创建专题知识库目录结构" },
 			{ text: "摄取资料", tip: "处理原始资料文件" },
@@ -171,14 +171,14 @@ export class ChatView extends ItemView {
 			{ text: "知识库状态", tip: "查看知识库概况" },
 		];
 		for (const h of hints) {
-			const chip = hintsEl.createEl("span", { cls: "llm-wiki-hint-chip", text: h.text, attr: { title: h.tip } });
+			const chip = hintsEl.createSpan( { cls: "llm-wiki-hint-chip", text: h.text, attr: { title: h.tip } });
 			chip.addEventListener("click", () => {
 				this.inputEl.value = h.text;
 				this.inputEl.focus();
 			});
 		}
 
-		const btnRow = inputContainer.createEl("div", { cls: "llm-wiki-btn-row" });
+		const btnRow = inputContainer.createDiv( { cls: "llm-wiki-btn-row" });
 
 		this.sendBtn = btnRow.createEl("button", { text: "发送", cls: "llm-wiki-btn llm-wiki-btn-primary" });
 		this.sendBtn.addEventListener("click", () => void this.sendMessage());
@@ -414,26 +414,26 @@ export class ChatView extends ItemView {
 	}
 
 	private async addUserMessage(text: string) {
-		const msgDiv = this.messagesEl.createEl("div", { cls: "llm-wiki-message llm-wiki-user-message" });
-		msgDiv.createEl("div", { cls: "llm-wiki-message-sender", text: "你" });
-		const contentDiv = msgDiv.createEl("div", { cls: "llm-wiki-message-content" });
+		const msgDiv = this.messagesEl.createDiv( { cls: "llm-wiki-message llm-wiki-user-message" });
+		msgDiv.createDiv( { cls: "llm-wiki-message-sender", text: "你" });
+		const contentDiv = msgDiv.createDiv( { cls: "llm-wiki-message-content" });
 		await MarkdownRenderer.render(this.app, text, contentDiv, "", this);
 		this.setupWikiLinkHandler(contentDiv);
 		this.scrollToBottom();
 	}
 
 	private addSystemMessage(text: string) {
-		const msgDiv = this.messagesEl.createEl("div", { cls: "llm-wiki-message llm-wiki-system-message" });
-		const contentDiv = msgDiv.createEl("div", { cls: "llm-wiki-message-content" });
+		const msgDiv = this.messagesEl.createDiv( { cls: "llm-wiki-message llm-wiki-system-message" });
+		const contentDiv = msgDiv.createDiv( { cls: "llm-wiki-message-content" });
 		void MarkdownRenderer.render(this.app, text, contentDiv, "", this);
 		this.setupWikiLinkHandler(contentDiv);
 	}
 
 	private addAssistantMessage(text: string) {
-		const msgDiv = this.messagesEl.createEl("div", { cls: "llm-wiki-message llm-wiki-assistant-message" });
-		msgDiv.createEl("div", { cls: "llm-wiki-message-sender", text: "Agent" });
+		const msgDiv = this.messagesEl.createDiv( { cls: "llm-wiki-message llm-wiki-assistant-message" });
+		msgDiv.createDiv( { cls: "llm-wiki-message-sender", text: "Agent" });
 		this.currentAssistantMessageEl = msgDiv;
-		this.currentAssistantEl = msgDiv.createEl("div", { cls: "llm-wiki-message-content" });
+		this.currentAssistantEl = msgDiv.createDiv( { cls: "llm-wiki-message-content" });
 		this.currentContent = text;
 		this.tokenBuffer = "";
 	}
@@ -481,11 +481,11 @@ export class ChatView extends ItemView {
 		this.flushTokenBuffer();
 		const argsStr = JSON.stringify(args, null, 2);
 		if (this.currentAssistantMessageEl) {
-			const card = this.currentAssistantMessageEl.createEl("div", { cls: "llm-wiki-tool-card llm-wiki-tool-running" });
+			const card = this.currentAssistantMessageEl.createDiv( { cls: "llm-wiki-tool-card llm-wiki-tool-running" });
 			// Keep all process cards before the answer so the final reply is always
 			// the last thing the user sees in this message.
 			if (this.currentAssistantEl) this.currentAssistantMessageEl.insertBefore(card, this.currentAssistantEl);
-			card.createEl("div", { cls: "llm-wiki-tool-name", text: `🟡 调用工具: ${name}` });
+			card.createDiv( { cls: "llm-wiki-tool-name", text: `🟡 调用工具: ${name}` });
 			const details = card.createEl("details", { cls: "llm-wiki-tool-details" });
 			details.createEl("summary", { text: "查看执行参数" });
 			const argsPre = details.createEl("pre", { cls: "llm-wiki-tool-args" });
@@ -506,7 +506,7 @@ export class ChatView extends ItemView {
 			this.toolCardEl.addClass(result.success ? "llm-wiki-tool-success" : "llm-wiki-tool-error");
 
 			if (result.content) {
-				const resultDiv = this.toolCardEl.createEl("div", { cls: "llm-wiki-tool-result" });
+				const resultDiv = this.toolCardEl.createDiv( { cls: "llm-wiki-tool-result" });
 				resultDiv.textContent = this.formatToolResultPreview(name, result);
 			}
 
@@ -526,7 +526,7 @@ export class ChatView extends ItemView {
 
 	private updateProgressBar(current: number, max: number) {
 		const pct = Math.min(100, Math.round((current / max) * 100));
-		this.progressBarEl.style.width = `${pct}%`;
+		this.progressBarEl.setCssProps({ "--llm-wiki-progress": `${pct}%` });
 		this.progressTextEl.textContent = `第 ${current}/${max} 轮`;
 		const container = this.progressBarEl.parentElement;
 		if (container) {
@@ -538,7 +538,7 @@ export class ChatView extends ItemView {
 		const container = this.progressBarEl.parentElement;
 		if (container) {
 			container.addClass("llm-wiki-hidden");
-			this.progressBarEl.style.width = "0%";
+			this.progressBarEl.setCssProps({ "--llm-wiki-progress": "0%" });
 			this.progressTextEl.textContent = "就绪";
 		}
 	}
@@ -618,9 +618,9 @@ export class ChatView extends ItemView {
 				e.preventDefault();
 				e.stopPropagation();
 				const file = this.app.vault.getAbstractFileByPath(href);
-				if (file) {
-					void this.app.workspace.getLeaf().openFile(file as TFile);
-				} else {
+				if (file instanceof TFile) {
+					void this.app.workspace.getLeaf().openFile(file);
+				} else if (file) {
 					this.inputEl.value = `帮我查看 ${href}`;
 					this.inputEl.focus();
 				}
@@ -640,12 +640,12 @@ export class ChatView extends ItemView {
 		const list = this.operationHistoryListEl;
 		list.empty();
 		for (const r of this.operationRecords.slice(0, 50)) {
-			const item = list.createEl("div", { cls: "llm-wiki-history-item" });
+			const item = list.createDiv( { cls: "llm-wiki-history-item" });
 			const icon = r.success ? "✅" : "❌";
-			item.createEl("span", { cls: "llm-wiki-history-time", text: r.time });
-			item.createEl("span", { cls: "llm-wiki-history-name", text: `${icon} ${r.name}` });
+			item.createSpan( { cls: "llm-wiki-history-time", text: r.time });
+			item.createSpan( { cls: "llm-wiki-history-name", text: `${icon} ${r.name}` });
 			if (r.detail) {
-				item.createEl("div", { cls: "llm-wiki-history-detail", text: r.detail });
+				item.createDiv( { cls: "llm-wiki-history-detail", text: r.detail });
 			}
 		}
 	}

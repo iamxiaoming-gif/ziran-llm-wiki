@@ -1,4 +1,4 @@
-import { App, normalizePath, TFile, TFolder } from "obsidian";
+import { App, normalizePath, TFile } from "obsidian";
 import type { LLMWikiSettings } from "../settings";
 import type { AgentsContext } from "../agent/prompts/agents-extractor";
 import { extractAgentsContext } from "../agent/prompts/agents-extractor";

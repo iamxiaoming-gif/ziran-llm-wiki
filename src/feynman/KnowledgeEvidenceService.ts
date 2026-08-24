@@ -42,7 +42,7 @@ export class KnowledgeEvidenceService {
 
 	private tokenize(value: string): string[] {
 		const normalized = value.toLowerCase();
-		const latin = normalized.match(/[a-z0-9_\-]{2,}/g) || [];
+		const latin = normalized.match(/[a-z0-9_-]{2,}/g) || [];
 		const chineseRuns = normalized.match(/[\u3400-\u9fff]{2,}/g) || [];
 		const chinese: string[] = [];
 		for (const run of chineseRuns) {

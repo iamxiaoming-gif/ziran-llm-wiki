@@ -1055,7 +1055,7 @@ export const BUILTIN_REFERENCES: Record<string, string> = {
 ## 日志规范
 
 - 每条记录以 \`## YYYY-MM-DD | 主题\` 格式开头
-- 使用 \`grep "^## \[" 知识库更新日志.md | tail -5\` 可快速查看最近5条
+- 使用 \`grep "^## [" 知识库更新日志.md | tail -5\` 可快速查看最近5条
 - 触发来源必填：用户查询 / Lint检查 / 原始资料 / 自发整理
 
 ---

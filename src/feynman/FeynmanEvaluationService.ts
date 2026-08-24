@@ -34,7 +34,8 @@ export class FeynmanEvaluationService {
 				],
 			}),
 		});
-		const message = response.json?.choices?.[0]?.message?.content;
+		const data: unknown = response.json;
+		const message = (data as { choices?: Array<{ message?: { content?: unknown } }> } | null)?.choices?.[0]?.message?.content;
 		if (typeof message !== "string") throw new Error("评估模型没有返回可用内容。");
 		return this.normalize(topic, this.parseJson(message), evidence);
 	}

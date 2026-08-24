@@ -157,7 +157,8 @@ export class FeynmanView extends ItemView {
 
 	private readAudioDuration(file: File): Promise<number> {
 		return new Promise((resolve, reject) => {
-			const audio = this.containerEl.ownerDocument.createElement("audio");
+			const frag = createFragment();
+			const audio = frag.createEl("audio");
 			const url = URL.createObjectURL(file);
 			let settled = false;
 			const timeout = window.setTimeout(() => finish(new Error("读取音频时长超时。")), 10000);
