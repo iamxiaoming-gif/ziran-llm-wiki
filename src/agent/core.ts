@@ -1,7 +1,8 @@
 import { requestUrl } from "obsidian";
 import type { LLMWikiSettings } from "../settings";
+import type { ContextManager } from "../services/ContextManager";
+import { ProviderAdapter } from "../services/ProviderAdapter";
 import type { ToolRegistry, ToolResult } from "./tools";
-import { buildSystemPrompt } from "./prompts";
 
 export interface ToolCallFunction {
 	name: string;
@@ -28,36 +29,64 @@ export interface ChatCallbacks {
 	onToolResult: (name: string, result: ToolResult) => void;
 	onComplete: (fullContent: string) => void;
 	onError: (error: string) => void;
+	onIteration?: (current: number, max: number) => void;
 }
 
-interface ChatCompletionChoice {
-	message: {
-		content?: string;
-		tool_calls?: ToolCall[];
-	};
+export interface ContextStatus {
+	estimatedTokens: number;
+	maxTokens: number;
+	usageRatio: number;
+	turns: number;
+	compressed: boolean;
 }
 
 interface ChatCompletionResponse {
-	choices: ChatCompletionChoice[];
+	choices?: Array<{
+		message?: {
+			content?: string | null;
+			tool_calls?: ToolCall[];
+		};
+		delta?: {
+			content?: string | null;
+			tool_calls?: ToolCall[];
+		};
+	}>;
+	error?: { message?: string };
+}
+
+interface RequestContext {
+	id: number;
+	aborted: boolean;
 }
 
 export class AgentCore {
 	settings: LLMWikiSettings;
 	toolRegistry: ToolRegistry;
 	history: ChatMessage[] = [];
-	private systemPrompt: string = "";
+	private systemPrompt = "";
+	private requestSequence = 0;
+	private activeRequest: RequestContext | null = null;
+	private providerAdapter = new ProviderAdapter();
 
-	constructor(settings: LLMWikiSettings, toolRegistry: ToolRegistry) {
+	constructor(
+		settings: LLMWikiSettings,
+		toolRegistry: ToolRegistry,
+		private contextManager?: ContextManager
+	) {
 		this.settings = settings;
 		this.toolRegistry = toolRegistry;
 	}
 
-	init(skillContent: string = "", referencesContent: string = "", memoryContext: string = "") {
-		this.systemPrompt = buildSystemPrompt(this.settings, skillContent, referencesContent, memoryContext);
+	init(systemPrompt: string = ""): void {
+		this.systemPrompt = systemPrompt;
 		this.history = [];
 	}
 
-	setHistory(history: ChatMessage[]) {
+	updateSystemContext(systemPrompt: string): void {
+		this.systemPrompt = systemPrompt;
+	}
+
+	setHistory(history: ChatMessage[]): void {
 		this.history = history;
 	}
 
@@ -65,264 +94,286 @@ export class AgentCore {
 		return this.history;
 	}
 
-	clearHistory() {
+	getContextStatus(): ContextStatus {
+		const compressed = this.history.some((message) => message.content.startsWith("[历史对话摘要]"));
+		if (!this.contextManager) {
+			const estimatedTokens = Math.ceil(JSON.stringify(this.history).length / 2);
+			return {
+				estimatedTokens,
+				maxTokens: 8000,
+				usageRatio: estimatedTokens / 8000,
+				turns: this.history.filter((message) => message.role === "user").length,
+				compressed,
+			};
+		}
+		const overheadTokens = this.contextManager.estimateTokens(this.systemPrompt)
+			+ this.contextManager.estimateTokens(JSON.stringify(this.toolRegistry.getToolDefinitions()));
+		const stats = this.contextManager.getSummaryStats(this.history, overheadTokens);
+		return {
+			estimatedTokens: stats.totalTokens,
+			maxTokens: stats.maxTokens,
+			usageRatio: stats.maxTokens > 0 ? stats.totalTokens / stats.maxTokens : 0,
+			turns: this.history.filter((message) => message.role === "user").length,
+			compressed,
+		};
+	}
+
+	clearHistory(): void {
 		this.history = [];
 	}
 
-	updateSettings(settings: LLMWikiSettings) {
+	updateSettings(settings: LLMWikiSettings): void {
 		this.settings = settings;
 		this.toolRegistry.updateSettings(settings);
 	}
 
-	abort() {
+	abort(): void {
+		if (this.activeRequest) this.activeRequest.aborted = true;
 	}
 
 	async chatStream(userMessage: string, callbacks: ChatCallbacks): Promise<void> {
-		this.history.push({ role: "user", content: userMessage });
+		const request = this.beginRequest(userMessage);
+		const maxIterations = this.settings.maxIterations || 30;
 
-		let fullContent = "";
-		let iterationCount = 0;
-		const maxIterations = this.settings.maxIterations || 15;
+		try {
+			for (let iteration = 1; iteration <= maxIterations; iteration++) {
+				if (this.isRequestAborted(request)) {
+					this.settleAbort(callbacks);
+					return;
+				}
+				callbacks.onIteration?.(iteration, maxIterations);
 
-		while (iterationCount < maxIterations) {
-			iterationCount++;
-
-			const messages: ChatMessage[] = [
-				{ role: "system", content: this.systemPrompt },
-				...this.history,
-			];
-
-			try {
-				const result = await this.streamCompletion(messages, callbacks);
-				fullContent = result.content;
+				const result = await this.nonStreamCompletion(this.buildMessages(), request);
+				if (this.isRequestAborted(request)) {
+					this.settleAbort(callbacks);
+					return;
+				}
 
 				if (result.toolCalls.length === 0) {
-					this.history.push({
-						role: "assistant",
-						content: result.content,
-					});
-					callbacks.onComplete(fullContent);
+					const finalContent = result.content.trim();
+					if (!finalContent) throw new Error("模型未返回最终答复，请重试。已完成的工具操作不会丢失。");
+					this.history.push({ role: "assistant", content: finalContent });
+					if (this.isRequestAborted(request)) {
+						callbacks.onComplete(finalContent);
+						return;
+					}
+					await this.streamTokens(finalContent, request, callbacks);
+					callbacks.onComplete(finalContent);
 					return;
 				}
 
 				this.history.push({
 					role: "assistant",
-					content: result.content || "",
+					content: result.content,
 					tool_calls: result.toolCalls,
 				});
 
 				for (const toolCall of result.toolCalls) {
-					let args: Record<string, unknown> = {};
-					try {
-						const parsed: unknown = JSON.parse(toolCall.function.arguments);
-						args = (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed))
-							? parsed as Record<string, unknown>
-							: {};
-					} catch {
-						args = {};
+					if (this.isRequestAborted(request)) {
+						this.appendCancelledToolResults(result.toolCalls, toolCall);
+						return;
 					}
-
-					callbacks.onToolCall(toolCall.function.name, args);
-
-					const toolResult = await this.toolRegistry.executeTool(
-						toolCall.function.name,
-						args
-					);
-
-					callbacks.onToolResult(toolCall.function.name, toolResult);
-
-					this.history.push({
-						role: "tool",
-						content: toolResult.content,
-						tool_call_id: toolCall.id,
-						name: toolCall.function.name,
-					});
+					await this.executeToolCall(toolCall, callbacks);
 				}
-			} catch (e: unknown) {
-				if (e instanceof Error && e.name === "AbortError") {
-					callbacks.onComplete(fullContent);
-					return;
-				}
-				const errorMsg = `请求失败: ${e instanceof Error ? e.message : String(e)}`;
-				this.history.push({ role: "assistant", content: errorMsg });
-				callbacks.onError(errorMsg);
-				return;
 			}
+
+			const message = `任务尚未完成：已达到最大执行轮数（${maxIterations}）。已完成的操作已保留，请发送“继续”恢复处理。`;
+			this.history.push({ role: "assistant", content: message });
+			callbacks.onComplete(message);
+		} catch (error: unknown) {
+			if (this.isRequestAborted(request)) this.settleAbort(callbacks);
+			else this.finishWithError(error, callbacks);
+		} finally {
+			if (this.activeRequest?.id === request.id) this.activeRequest = null;
 		}
-
-		const timeoutMsg = `已达到最大迭代次数(${maxIterations})，请简化问题或分步执行。`;
-		this.history.push({ role: "assistant", content: timeoutMsg });
-		callbacks.onComplete(timeoutMsg);
-	}
-
-	private async streamCompletion(
-		messages: ChatMessage[],
-		callbacks: ChatCallbacks
-	): Promise<{ content: string; toolCalls: ToolCall[] }> {
-		const url = `${this.settings.apiBaseUrl}/chat/completions`;
-		const body = {
-			model: this.settings.modelName,
-			messages: messages.map((m) => ({
-				role: m.role,
-				content: m.content || null,
-				tool_calls: m.tool_calls,
-				tool_call_id: m.tool_call_id,
-				name: m.name,
-			})),
-			tools: this.toolRegistry.getToolDefinitions(),
-			tool_choice: "auto" as const,
-			temperature: this.settings.temperature,
-			stream: false,
-		};
-
-		const response = await requestUrl({
-			url,
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				Authorization: `Bearer ${this.settings.apiKey}`,
-			},
-			body: JSON.stringify(body),
-		});
-
-		const data = response.json as ChatCompletionResponse;
-		const choice = data.choices?.[0];
-		if (!choice) throw new Error("API 返回为空");
-
-		const msg = choice.message;
-		const content: string = msg.content || "";
-		const toolCalls: ToolCall[] = msg.tool_calls || [];
-
-		if (content) {
-			callbacks.onToken(content);
-		}
-
-		return { content, toolCalls };
 	}
 
 	async chatNonStream(userMessage: string, callbacks: ChatCallbacks): Promise<void> {
-		this.history.push({ role: "user", content: userMessage });
+		const request = this.beginRequest(userMessage);
+		const maxIterations = this.settings.maxIterations || 30;
 
-		let fullContent = "";
-		let iterationCount = 0;
-		const maxIterations = this.settings.maxIterations || 15;
+		try {
+			for (let iteration = 1; iteration <= maxIterations; iteration++) {
+				if (this.isRequestAborted(request)) {
+					this.settleAbort(callbacks);
+					return;
+				}
+				callbacks.onIteration?.(iteration, maxIterations);
 
-		while (iterationCount < maxIterations) {
-			iterationCount++;
-
-			const messages: ChatMessage[] = [
-				{ role: "system", content: this.systemPrompt },
-				...this.history,
-			];
-
-			try {
-				const result = await this.nonStreamCompletion(messages);
-				const content = result.content;
+				const result = await this.nonStreamCompletion(this.buildMessages(), request);
+				if (this.isRequestAborted(request)) {
+					this.settleAbort(callbacks);
+					return;
+				}
 
 				if (result.toolCalls.length === 0) {
-					callbacks.onToken(content);
-					this.history.push({ role: "assistant", content });
-					fullContent = content;
-					callbacks.onComplete(fullContent);
+					const finalContent = result.content.trim();
+					if (!finalContent) throw new Error("模型未返回最终答复，请重试。已完成的工具操作不会丢失。");
+					this.history.push({ role: "assistant", content: finalContent });
+					callbacks.onComplete(finalContent);
 					return;
 				}
 
 				this.history.push({
 					role: "assistant",
-					content: content || "",
+					content: result.content,
 					tool_calls: result.toolCalls,
 				});
 
 				for (const toolCall of result.toolCalls) {
-					let args: Record<string, unknown> = {};
-					try {
-						const parsed: unknown = JSON.parse(toolCall.function.arguments);
-						args = (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed))
-							? parsed as Record<string, unknown>
-							: {};
-					} catch {
-						args = {};
+					if (this.isRequestAborted(request)) {
+						this.appendCancelledToolResults(result.toolCalls, toolCall);
+						return;
 					}
-
-					callbacks.onToolCall(toolCall.function.name, args);
-					const toolResult = await this.toolRegistry.executeTool(
-						toolCall.function.name,
-						args
-					);
-					callbacks.onToolResult(toolCall.function.name, toolResult);
-
-					this.history.push({
-						role: "tool",
-						content: toolResult.content,
-						tool_call_id: toolCall.id,
-						name: toolCall.function.name,
-					});
+					await this.executeToolCall(toolCall, callbacks);
 				}
-			} catch (e: unknown) {
-				const errorMsg = `请求失败: ${e instanceof Error ? e.message : String(e)}`;
-				this.history.push({ role: "assistant", content: errorMsg });
-				callbacks.onError(errorMsg);
-				return;
+			}
+
+			const message = `任务尚未完成：已达到最大执行轮数（${maxIterations}）。已完成的操作已保留，请发送“继续”恢复处理。`;
+			this.history.push({ role: "assistant", content: message });
+			callbacks.onComplete(message);
+		} catch (error: unknown) {
+			if (this.isRequestAborted(request)) this.settleAbort(callbacks);
+			else this.finishWithError(error, callbacks);
+		} finally {
+			if (this.activeRequest?.id === request.id) this.activeRequest = null;
+		}
+	}
+
+	private settleAbort(callbacks: ChatCallbacks, partialContent = ""): void {
+		const content = (partialContent || "").trim();
+		callbacks.onComplete(content
+			? `${content}\n\n_（已按你的要求停止生成；已完成的工具操作会保留，正在执行的工具操作可能仍会完成。）_`
+			: "已停止生成。");
+	}
+
+	private async streamTokens(text: string, request: RequestContext, callbacks: ChatCallbacks): Promise<void> {
+		if (!text) return;
+		const chunkSize = 2;
+		const delayMs = 16;
+		for (let i = 0; i < text.length; i += chunkSize) {
+			if (this.isRequestAborted(request)) return;
+			const chunk = text.slice(i, i + chunkSize);
+			callbacks.onToken(chunk);
+			if (i + chunkSize < text.length) {
+				await new Promise((resolve) => globalThis.setTimeout(resolve, delayMs));
 			}
 		}
+	}
 
-		const timeoutMsg = `已达到最大迭代次数(${maxIterations})`;
-		this.history.push({ role: "assistant", content: timeoutMsg });
-		callbacks.onComplete(timeoutMsg);
+	private beginRequest(userMessage: string): RequestContext {
+		if (this.activeRequest) this.activeRequest.aborted = true;
+		const request = { id: ++this.requestSequence, aborted: false };
+		this.activeRequest = request;
+		this.toolRegistry.beginUserTurn();
+		this.history.push({ role: "user", content: userMessage });
+		return request;
+	}
+
+	private buildMessages(): ChatMessage[] {
+		return [{ role: "system", content: this.systemPrompt }, ...this.history];
+	}
+
+	private async executeToolCall(toolCall: ToolCall, callbacks: ChatCallbacks): Promise<void> {
+		const args = this.parseToolArguments(toolCall.function.arguments);
+		callbacks.onToolCall(toolCall.function.name, args);
+		const result = await this.toolRegistry.executeTool(toolCall.function.name, args);
+		callbacks.onToolResult(toolCall.function.name, result);
+		this.history.push({
+			role: "tool",
+			content: result.content,
+			tool_call_id: toolCall.id,
+			name: toolCall.function.name,
+		});
+	}
+
+	private parseToolArguments(rawArguments: string): Record<string, unknown> {
+		try {
+			const parsed: unknown = JSON.parse(rawArguments || "{}");
+			return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+				? parsed as Record<string, unknown>
+				: {};
+		} catch {
+			return {};
+		}
+	}
+
+	private appendCancelledToolResults(toolCalls: ToolCall[], firstCancelled: ToolCall): void {
+		const start = toolCalls.indexOf(firstCancelled);
+		for (const toolCall of toolCalls.slice(Math.max(0, start))) {
+			this.history.push({
+				role: "tool",
+				content: "用户已停止生成，此工具未执行。",
+				tool_call_id: toolCall.id,
+				name: toolCall.function.name,
+			});
+		}
 	}
 
 	private async nonStreamCompletion(
-		messages: ChatMessage[]
+		messages: ChatMessage[],
+		request: RequestContext
 	): Promise<{ content: string; toolCalls: ToolCall[] }> {
-		const url = `${this.settings.apiBaseUrl}/chat/completions`;
-		const body = {
+		const config = this.providerAdapter.getRequestConfig(this.settings);
+		const body = JSON.stringify({
 			model: this.settings.modelName,
-			messages: messages.map((m) => ({
-				role: m.role,
-				content: m.content || null,
-				tool_calls: m.tool_calls,
-				tool_call_id: m.tool_call_id,
-				name: m.name,
-			})),
+			messages: this.serializeMessages(messages),
 			tools: this.toolRegistry.getToolDefinitions(),
-			tool_choice: "auto" as const,
-			temperature: this.settings.temperature,
+			tool_choice: "auto",
+			temperature: this.providerAdapter.normalizeTemperature(this.settings),
 			stream: false,
-		};
+		});
 
 		const maxRetries = 2;
 		for (let attempt = 0; attempt <= maxRetries; attempt++) {
+			if (this.isRequestAborted(request)) throw new Error("AbortError");
 			try {
 				const response = await requestUrl({
-					url,
+					url: config.url,
 					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-						Authorization: `Bearer ${this.settings.apiKey}`,
-					},
-					body: JSON.stringify(body),
+					headers: config.headers,
+					body,
 				});
-
-				const data = response.json as ChatCompletionResponse;
-				const choice = data.choices?.[0];
-				if (!choice) throw new Error("API 返回为空");
-
-				const msg = choice.message;
-				return {
-					content: msg.content || "",
-					toolCalls: msg.tool_calls || [],
-				};
-			} catch (e: unknown) {
-				const status = (typeof e === "object" && e !== null && "status" in e) ? (e as { status: number }).status : 0;
-				if (status >= 400 && status < 500) throw e;
-				if (attempt < maxRetries) {
-					await new Promise((r) => window.setTimeout(r, 1000 * (attempt + 1)));
-				} else {
-					throw e;
-				}
+				return this.readResponse(response.json as ChatCompletionResponse);
+			} catch (error: unknown) {
+				const status = typeof error === "object" && error !== null && "status" in error
+					? Number((error as { status: unknown }).status)
+					: 0;
+				if ((status >= 400 && status < 500) || attempt === maxRetries) throw error;
+				await new Promise((resolve) => globalThis.setTimeout(resolve, 1000 * (attempt + 1)));
 			}
 		}
-
 		throw new Error("API 调用失败（已重试）");
+	}
+
+	private readResponse(data: ChatCompletionResponse): { content: string; toolCalls: ToolCall[] } {
+		if (data.error?.message) throw new Error(data.error.message);
+		const message = data.choices?.[0]?.message;
+		if (!message) throw new Error("API 返回为空");
+		return {
+			content: message.content || "",
+			toolCalls: Array.isArray(message.tool_calls) ? message.tool_calls : [],
+		};
+	}
+
+	private serializeMessages(messages: ChatMessage[]) {
+		return messages.map((message) => ({
+			role: message.role,
+			content: message.content || (message.tool_calls ? null : ""),
+			tool_calls: message.tool_calls,
+			tool_call_id: message.tool_call_id,
+			name: message.name,
+		}));
+	}
+
+	private isRequestAborted(request: RequestContext): boolean {
+		return request.aborted || this.activeRequest?.id !== request.id;
+	}
+
+	private finishWithError(error: unknown, callbacks: ChatCallbacks): void {
+		const detail = error instanceof Error ? error.message : String(error);
+		const message = detail === "AbortError" ? "已停止生成。" : `请求失败: ${detail}`;
+		this.history.push({ role: "assistant", content: message });
+		callbacks.onError(message);
 	}
 }

@@ -1,9 +1,10 @@
 {
   "id": "ziran-llm-wiki",
   "name": "Ziran LLM Wiki",
-  "version": "0.1.0",
+  "version": "0.6.6",
   "minAppVersion": "1.8.0",
-  "description": "Build deep topic knowledge bases through conversational AI, based on Karpathy's LLM Wiki methodology.",
+  "description": "Build and verify knowledge through conversational AI and evidence-based Feynman learning.",
   "author": "iamxiaoming-gif",
+  "authorUrl": "https://github.com/iamxiaoming-gif",
   "isDesktopOnly": true
 }

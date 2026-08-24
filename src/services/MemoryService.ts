@@ -1,5 +1,7 @@
 import { App, normalizePath, TFile, TFolder } from "obsidian";
 import type { LLMWikiSettings } from "../settings";
+import type { AgentsContext } from "../agent/prompts/agents-extractor";
+import { extractAgentsContext } from "../agent/prompts/agents-extractor";
 
 export class MemoryService {
 	app: App;
@@ -14,33 +16,18 @@ export class MemoryService {
 		this.settings = settings;
 	}
 
-	async loadSkillContent(): Promise<string> {
+	async loadAgentsContext(knowledgeBasePath: string): Promise<AgentsContext | null> {
 		try {
-			const path = normalizePath(`${this.settings.skillFolderPath}/SKILL.md`);
-			const file = this.app.vault.getAbstractFileByPath(path);
+			const agentsPath = normalizePath(`${knowledgeBasePath}/AGENTS.md`);
+			const file = this.app.vault.getAbstractFileByPath(agentsPath);
 			if (file && file instanceof TFile) {
-				return await this.app.vault.read(file);
-			}
-		} catch { /* ignore */ }
-		return "";
-	}
-
-	async loadReferencesContent(): Promise<string> {
-		try {
-			const parts: string[] = [];
-			const path = normalizePath(`${this.settings.skillFolderPath}/references`);
-			const folder = this.app.vault.getAbstractFileByPath(path);
-			if (folder && folder instanceof TFolder) {
-				for (const child of folder.children) {
-					if (child instanceof TFile && child.extension === "md") {
-						const content = await this.app.vault.read(child);
-						parts.push(`### ${child.name}\n\n${content}`);
-					}
+				const content = await this.app.vault.read(file);
+				if (content.trim()) {
+					return extractAgentsContext(content);
 				}
 			}
-			return parts.join("\n\n---\n\n");
 		} catch { /* ignore */ }
-		return "";
+		return null;
 	}
 
 	async loadMemoryContext(): Promise<string> {
