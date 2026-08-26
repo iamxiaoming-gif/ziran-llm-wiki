@@ -558,6 +558,14 @@
 	opacity: 0.9;
 }
 
+.llm-wiki-btn:disabled,
+.llm-wiki-btn[disabled] {
+	opacity: 0.55;
+	cursor: not-allowed;
+	background: var(--bg-tertiary);
+	color: var(--text-secondary);
+}
+
 .llm-wiki-btn-primary {
 	background: var(--accent);
 	color: var(--on-accent);
@@ -567,9 +575,21 @@
 	background: var(--accent-hover);
 }
 
+.llm-wiki-btn-primary:disabled,
+.llm-wiki-btn-primary[disabled] {
+	background: var(--bg-tertiary);
+	color: var(--text-secondary);
+}
+
 .llm-wiki-btn-danger {
 	background: var(--danger);
 	color: var(--on-danger);
+}
+
+.llm-wiki-btn-danger:disabled,
+.llm-wiki-btn-danger[disabled] {
+	background: var(--bg-tertiary);
+	color: var(--text-secondary);
 }
 
 .llm-wiki-root .llm-wiki-hidden.llm-wiki-hidden {

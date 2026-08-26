@@ -1,5 +1,6 @@
 import { App, normalizePath, TFile, TFolder } from "obsidian";
 import type { LLMWikiSettings } from "../settings";
+import { FileTextExtractor } from "./FileTextExtractor";
 
 export type IngestionItemStatus = "pending" | "processing" | "completed" | "failed" | "skipped";
 export type IngestionItemAction = "new" | "changed" | "forced" | "skip" | "error";
@@ -71,8 +72,11 @@ export class IngestionBatchService {
 	private storeCache: IngestionStore | null = null;
 	private storeLoadPromise: Promise<IngestionStore> | null = null;
 	private saveQueue: Promise<void> = Promise.resolve();
+	private fileTextExtractor: FileTextExtractor;
 
-	constructor(private app: App, private settings: LLMWikiSettings) {}
+	constructor(private app: App, private settings: LLMWikiSettings) {
+		this.fileTextExtractor = new FileTextExtractor(app.vault);
+	}
 
 	updateSettings(settings: LLMWikiSettings): void {
 		this.settings = settings;
@@ -133,7 +137,7 @@ export class IngestionBatchService {
 					fingerprint = previous.fingerprint;
 					action = "skip";
 				} else {
-					const content = await this.app.vault.read(file);
+					const content = await this.fileTextExtractor.extract(file);
 					fingerprint = this.fingerprint(content);
 					if (force) action = "forced";
 					else if (previous?.fingerprint === fingerprint) action = "skip";
@@ -241,7 +245,7 @@ export class IngestionBatchService {
 		}
 
 		try {
-			const raw = await this.app.vault.read(file);
+			const raw = await this.fileTextExtractor.extract(file);
 			const currentFingerprint = this.fingerprint(raw);
 			if (currentFingerprint !== item.fingerprint) {
 				item.fingerprint = currentFingerprint;
