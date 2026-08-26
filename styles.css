@@ -4,14 +4,14 @@
 	--bg-tertiary: #3a3b3f;
 	--text-primary: #e4e5e7;
 	--text-secondary: #9ca3af;
-	--accent: #2563eb;
-	--accent-hover: #1d4ed8;
+	--accent: #3d6fe0;
+	--accent-hover: #325fc9;
 	--on-accent: #ffffff;
-	--danger: #ef4444;
+	--danger: #e5534b;
 	--on-danger: #ffffff;
-	--success: #22c55e;
-	--warning: #f59e0b;
-	--border: #3f3f46;
+	--success: #2ea06b;
+	--warning: #d9a13a;
+	--border: rgba(255, 255, 255, 0.1);
 	--radius: 8px;
 	--font-size: 14px;
 	font-size: var(--font-size);
@@ -325,11 +325,40 @@
 }
 
 .llm-wiki-message-sender {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
 	font-size: 12px;
 	font-weight: 600;
 	color: var(--text-secondary);
 	margin-bottom: 4px;
 	padding: 0 4px;
+}
+
+.llm-wiki-copy-btn {
+	border: 1px solid var(--border);
+	background: transparent;
+	color: var(--text-secondary);
+	font-size: 11px;
+	padding: 1px 8px;
+	border-radius: 6px;
+	cursor: pointer;
+	opacity: 0;
+	transition: opacity 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.llm-wiki-message:hover .llm-wiki-copy-btn {
+	opacity: 1;
+}
+
+.llm-wiki-copy-btn:hover {
+	color: var(--text-primary);
+	border-color: var(--accent);
+}
+
+.llm-wiki-message-content {
+	user-select: text;
+	-webkit-user-select: text;
 }
 
 .llm-wiki-message-content {
@@ -599,6 +628,25 @@
 	color: var(--text-secondary);
 }
 
+.llm-wiki-message-content h1,
+.llm-wiki-message-content h2,
+.llm-wiki-message-content h3,
+.llm-wiki-message-content h4,
+.llm-wiki-message-content h5,
+.llm-wiki-message-content h6 {
+	color: var(--text-primary);
+	font-weight: 700;
+	line-height: 1.35;
+	margin: 14px 0 8px;
+}
+
+.llm-wiki-message-content h1 { font-size: 19px; }
+.llm-wiki-message-content h2 { font-size: 17px; }
+.llm-wiki-message-content h3 { font-size: 15px; }
+.llm-wiki-message-content h4,
+.llm-wiki-message-content h5,
+.llm-wiki-message-content h6 { font-size: 14px; }
+
 .llm-wiki-message-content hr {
 	border: none;
 	border-top: 1px solid var(--border);
@@ -620,109 +668,109 @@
 
 /* Theme: Warm Light */
 .llm-wiki-theme-warm-light .llm-wiki-root {
-	--bg-primary: #faf8f5;
+	--bg-primary: #f6f4ef;
 	--bg-secondary: #ffffff;
-	--bg-tertiary: #f0ece8;
-	--text-primary: #2d2a26;
-	--text-secondary: #6f6a64;
-	--accent: #c14b32;
-	--accent-hover: #a83f29;
+	--bg-tertiary: #ece9e2;
+	--text-primary: #26241f;
+	--text-secondary: #6e6a63;
+	--accent: #b3492f;
+	--accent-hover: #9a3d27;
 	--on-accent: #ffffff;
-	--border: #e5e0db;
+	--border: rgba(38, 36, 31, 0.12);
 }
 
 /* Theme: Obsidian Red */
 .llm-wiki-theme-obsidian-red .llm-wiki-root {
-	--bg-primary: #1a1a2e;
-	--bg-secondary: #222240;
-	--bg-tertiary: #2a2a50;
-	--text-primary: #e8e8f0;
-	--text-secondary: #b3b3cc;
-	--accent: #e63946;
-	--accent-hover: #d62d3a;
+	--bg-primary: #171722;
+	--bg-secondary: #20202e;
+	--bg-tertiary: #2a2a3b;
+	--text-primary: #ececf2;
+	--text-secondary: #b7b7c9;
+	--accent: #c73e48;
+	--accent-hover: #b2353f;
 	--on-accent: #ffffff;
-	--border: #3a3a58;
+	--border: rgba(255, 255, 255, 0.09);
 }
 
 /* Theme: Lavender */
 .llm-wiki-theme-lavender .llm-wiki-root {
-	--bg-primary: #1e1a2e;
-	--bg-secondary: #2a2540;
-	--bg-tertiary: #353050;
-	--text-primary: #e8e4f0;
-	--text-secondary: #bcb4d8;
-	--accent: #9b59b6;
-	--accent-hover: #8e44ad;
+	--bg-primary: #1b1826;
+	--bg-secondary: #241f33;
+	--bg-tertiary: #2e2841;
+	--text-primary: #ece8f4;
+	--text-secondary: #bdb5d4;
+	--accent: #8452ad;
+	--accent-hover: #74479b;
 	--on-accent: #ffffff;
-	--border: #3a3558;
+	--border: rgba(255, 255, 255, 0.09);
 }
 
 /* Theme: Forest Green */
 .llm-wiki-theme-forest-green .llm-wiki-root {
-	--bg-primary: #0f1a12;
-	--bg-secondary: #1a2a1e;
-	--bg-tertiary: #243a2a;
-	--text-primary: #dce8e0;
-	--text-secondary: #9dbaa8;
-	--accent: #2ecc71;
-	--accent-hover: #27ae60;
-	--on-accent: #0f1a12;
-	--border: #2a3a2e;
+	--bg-primary: #101814;
+	--bg-secondary: #18231d;
+	--bg-tertiary: #213027;
+	--text-primary: #e0eae3;
+	--text-secondary: #a4b8ab;
+	--accent: #4fae7d;
+	--accent-hover: #429a6c;
+	--on-accent: #0d1611;
+	--border: rgba(255, 255, 255, 0.08);
 }
 
 /* v0.6 Theme: Folio */
 .llm-wiki-theme-folio .llm-wiki-root {
-	--bg-primary: #161616;
-	--bg-secondary: #20201e;
-	--bg-tertiary: #2b2a27;
-	--text-primary: #f0ece3;
-	--text-secondary: #aaa398;
-	--accent: #d09a58;
-	--accent-hover: #b77f3d;
+	--bg-primary: #151412;
+	--bg-secondary: #1e1d1a;
+	--bg-tertiary: #282621;
+	--text-primary: #ece7dd;
+	--text-secondary: #b0a896;
+	--accent: #c19355;
+	--accent-hover: #a97e45;
 	--on-accent: #161616;
-	--border: #3a3833;
+	--border: rgba(255, 255, 255, 0.08);
 	--radius: 6px;
 }
 
 /* v0.6 Theme: Glass */
 .llm-wiki-theme-glass .llm-wiki-root {
-	--bg-primary: #101317;
-	--bg-secondary: #192027;
-	--bg-tertiary: #24303a;
-	--text-primary: #edf7ff;
-	--text-secondary: #9db0bd;
-	--accent: #58a6ff;
-	--accent-hover: #3f8fe6;
-	--on-accent: #101317;
-	--border: #2f4050;
+	--bg-primary: #0e1216;
+	--bg-secondary: #161d24;
+	--bg-tertiary: #1f2a34;
+	--text-primary: #eaf3fa;
+	--text-secondary: #a4b6c4;
+	--accent: #5aa7ff;
+	--accent-hover: #4590e8;
+	--on-accent: #0c1014;
+	--border: rgba(255, 255, 255, 0.08);
 	--radius: 14px;
 }
 
 /* v0.6 Theme: Terminal */
 .llm-wiki-theme-terminal .llm-wiki-root {
-	--bg-primary: #0f0f10;
-	--bg-secondary: #171719;
-	--bg-tertiary: #232326;
-	--text-primary: #eeeeee;
-	--text-secondary: #9a9a9a;
-	--accent: #d7d7d7;
-	--accent-hover: #ffffff;
-	--on-accent: #0f0f10;
-	--border: #3a3a3d;
+	--bg-primary: #0d0f0e;
+	--bg-secondary: #141715;
+	--bg-tertiary: #1e221f;
+	--text-primary: #e2e8e2;
+	--text-secondary: #9eaa9e;
+	--accent: #7fc984;
+	--accent-hover: #66b86c;
+	--on-accent: #0b0f0c;
+	--border: rgba(255, 255, 255, 0.08);
 	--radius: 2px;
 }
 
 /* v0.6 Theme: Studio */
 .llm-wiki-theme-studio .llm-wiki-root {
-	--bg-primary: #111512;
-	--bg-secondary: #1b221d;
-	--bg-tertiary: #253027;
-	--text-primary: #edf4ee;
-	--text-secondary: #9fb0a3;
-	--accent: #7dc08a;
-	--accent-hover: #64a970;
-	--on-accent: #111512;
-	--border: #304035;
+	--bg-primary: #101311;
+	--bg-secondary: #181c19;
+	--bg-tertiary: #21261f;
+	--text-primary: #eef2ee;
+	--text-secondary: #a8b4aa;
+	--accent: #7fbd8d;
+	--accent-hover: #6aa878;
+	--on-accent: #0d110e;
+	--border: rgba(255, 255, 255, 0.08);
 	--radius: 8px;
 }
 
@@ -799,22 +847,22 @@
 	width: 24px;
 	height: 24px;
 	border-radius: 6px;
-	background: linear-gradient(135deg, #d09a58 0 50%, #161616 50%);
+	background: linear-gradient(135deg, #c19355 0 50%, #151412 50%);
 }
 
 .llm-wiki-theme-preview-glass .llm-wiki-theme-preview-swatch {
 	border-radius: 10px;
-	background: linear-gradient(135deg, #58a6ff 0 50%, #101317 50%);
+	background: linear-gradient(135deg, #5aa7ff 0 50%, #0e1216 50%);
 }
 
 .llm-wiki-theme-preview-terminal .llm-wiki-theme-preview-swatch {
 	border-radius: 0;
-	background: linear-gradient(135deg, #eeeeee 0 50%, #0f0f10 50%);
+	background: linear-gradient(135deg, #7fc984 0 50%, #0d0f0e 50%);
 }
 
 .llm-wiki-theme-preview-studio .llm-wiki-theme-preview-swatch {
 	border-radius: 50%;
-	background: linear-gradient(135deg, #7dc08a 0 50%, #111512 50%);
+	background: linear-gradient(135deg, #7fbd8d 0 50%, #101311 50%);
 }
 
 .llm-wiki-model-info {

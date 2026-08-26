@@ -431,7 +431,24 @@ export class ChatView extends ItemView {
 
 	private addAssistantMessage(text: string) {
 		const msgDiv = this.messagesEl.createDiv( { cls: "llm-wiki-message llm-wiki-assistant-message" });
-		msgDiv.createDiv( { cls: "llm-wiki-message-sender", text: "Agent" });
+		const senderRow = msgDiv.createDiv( { cls: "llm-wiki-message-sender" });
+		senderRow.createSpan({ text: "Agent" });
+		const copyBtn = senderRow.createEl("button", { cls: "llm-wiki-copy-btn", text: "复制" });
+		copyBtn.addEventListener("click", () => {
+			void (async () => {
+				try {
+					await navigator.clipboard.writeText(text);
+					copyBtn.textContent = "已复制 ✓";
+				} catch {
+					// 剪贴板不可用时回退到选择文本
+					window.getSelection()?.selectAllChildren(this.currentAssistantEl ?? msgDiv);
+					copyBtn.textContent = "已选中";
+				}
+				window.setTimeout(() => {
+					copyBtn.textContent = "复制";
+				}, 1800);
+			})();
+		});
 		this.currentAssistantMessageEl = msgDiv;
 		this.currentAssistantEl = msgDiv.createDiv( { cls: "llm-wiki-message-content" });
 		this.currentContent = text;
