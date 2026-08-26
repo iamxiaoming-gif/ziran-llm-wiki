@@ -6,7 +6,9 @@
 	--text-secondary: #9ca3af;
 	--accent: #2563eb;
 	--accent-hover: #1d4ed8;
+	--on-accent: #ffffff;
 	--danger: #ef4444;
+	--on-danger: #ffffff;
 	--success: #22c55e;
 	--warning: #f59e0b;
 	--border: #3f3f46;
@@ -302,6 +304,8 @@
 	display: flex;
 	flex-direction: column;
 	gap: 16px;
+	background: var(--bg-primary);
+	color: var(--text-primary);
 }
 
 .llm-wiki-message {
@@ -358,7 +362,7 @@
 
 .llm-wiki-user-message .llm-wiki-message-content {
 	background: var(--accent);
-	color: #fff;
+	color: var(--on-accent);
 	border-bottom-right-radius: 2px;
 }
 
@@ -430,6 +434,7 @@
 	padding: 12px 16px;
 	border-top: 1px solid var(--border);
 	background: var(--bg-secondary);
+	color: var(--text-primary);
 }
 
 .llm-wiki-progress-container {
@@ -505,7 +510,7 @@
 
 .llm-wiki-hint-chip:hover {
 	background: var(--accent);
-	color: #fff;
+	color: var(--on-accent);
 	border-color: var(--accent);
 }
 
@@ -526,7 +531,7 @@
 
 .llm-wiki-btn-primary {
 	background: var(--accent);
-	color: #fff;
+	color: var(--on-accent);
 }
 
 .llm-wiki-btn-primary:hover {
@@ -535,7 +540,7 @@
 
 .llm-wiki-btn-danger {
 	background: var(--danger);
-	color: #fff;
+	color: var(--on-danger);
 }
 
 .llm-wiki-root .llm-wiki-hidden.llm-wiki-hidden {
@@ -619,9 +624,10 @@
 	--bg-secondary: #ffffff;
 	--bg-tertiary: #f0ece8;
 	--text-primary: #2d2a26;
-	--text-secondary: #8b8580;
-	--accent: #e8654a;
-	--accent-hover: #d4553a;
+	--text-secondary: #6f6a64;
+	--accent: #c14b32;
+	--accent-hover: #a83f29;
+	--on-accent: #ffffff;
 	--border: #e5e0db;
 }
 
@@ -631,9 +637,10 @@
 	--bg-secondary: #222240;
 	--bg-tertiary: #2a2a50;
 	--text-primary: #e8e8f0;
-	--text-secondary: #a0a0b8;
+	--text-secondary: #b3b3cc;
 	--accent: #e63946;
 	--accent-hover: #d62d3a;
+	--on-accent: #ffffff;
 	--border: #3a3a58;
 }
 
@@ -643,9 +650,10 @@
 	--bg-secondary: #2a2540;
 	--bg-tertiary: #353050;
 	--text-primary: #e8e4f0;
-	--text-secondary: #a8a0c0;
+	--text-secondary: #bcb4d8;
 	--accent: #9b59b6;
 	--accent-hover: #8e44ad;
+	--on-accent: #ffffff;
 	--border: #3a3558;
 }
 
@@ -655,9 +663,10 @@
 	--bg-secondary: #1a2a1e;
 	--bg-tertiary: #243a2a;
 	--text-primary: #dce8e0;
-	--text-secondary: #8aa894;
+	--text-secondary: #9dbaa8;
 	--accent: #2ecc71;
 	--accent-hover: #27ae60;
+	--on-accent: #0f1a12;
 	--border: #2a3a2e;
 }
 
@@ -670,6 +679,7 @@
 	--text-secondary: #aaa398;
 	--accent: #d09a58;
 	--accent-hover: #b77f3d;
+	--on-accent: #161616;
 	--border: #3a3833;
 	--radius: 6px;
 }
@@ -683,6 +693,7 @@
 	--text-secondary: #9db0bd;
 	--accent: #58a6ff;
 	--accent-hover: #3f8fe6;
+	--on-accent: #101317;
 	--border: #2f4050;
 	--radius: 14px;
 }
@@ -696,6 +707,7 @@
 	--text-secondary: #9a9a9a;
 	--accent: #d7d7d7;
 	--accent-hover: #ffffff;
+	--on-accent: #0f0f10;
 	--border: #3a3a3d;
 	--radius: 2px;
 }
@@ -709,6 +721,7 @@
 	--text-secondary: #9fb0a3;
 	--accent: #7dc08a;
 	--accent-hover: #64a970;
+	--on-accent: #111512;
 	--border: #304035;
 	--radius: 8px;
 }

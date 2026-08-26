@@ -65,7 +65,7 @@ export interface IngestionPlanOptions {
 	limit?: number;
 }
 
-const SUPPORTED_EXTENSIONS = new Set(["md", "txt", "json", "csv", "tsv", "html", "htm", "xml", "yaml", "yml"]);
+const SUPPORTED_EXTENSIONS = new Set(["md", "txt", "json", "csv", "tsv", "html", "htm", "xml", "yaml", "yml", "pdf", "docx", "pptx"]);
 
 export class IngestionBatchService {
 	private storeCache: IngestionStore | null = null;

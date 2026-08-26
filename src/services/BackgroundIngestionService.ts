@@ -343,7 +343,7 @@ export class BackgroundIngestionService {
 				},
 			};
 
-			const prompt = `请摄取以下原始资料文件，并严格按照 SKILL.md 的 9 章模板和工作流执行。\n\n文件路径：${filePath}\n\n请先调用 ingest_raw_material(file_path="${filePath}") 读取资料，然后一次性调用所有 create_and_index_page 创建知识点页面（每个页面必须包含完整 9 章内容），最后执行入链与自检。\n\n注意：\n1. 本次处理只针对这一个文件，不要处理其他文件\n2. 所有知识点页面创建完成后才能结束\n3. 每个新页面必须在 ≥3 个已有页面中添加入链\n4. 最后必须用中文总结创建了哪些页面`;
+			const prompt = `请摄取以下原始资料文件，并严格按照 SKILL.md 的模板和工作流执行。\n\n文件路径：${filePath}\n\n请先调用 ingest_raw_material(file_path="${filePath}") 读取资料，然后一次性调用所有 create_and_index_page 创建知识点页面（每个页面必须包含必选章节：核心定义、核心要点、相关知识点、原文出处、更新日志；可选章节按资料实际情况取舍，禁止硬凑），最后执行入链与自检。\n\n注意：\n1. 本次处理只针对这一个文件，不要处理其他文件\n2. 所有知识点页面创建完成后才能结束\n3. 每个新页面必须在 ≥3 个已有页面中添加入链\n4. 最后必须用中文总结创建了哪些页面`;
 
 			void agent.chatNonStream(prompt, callbacks);
 		});

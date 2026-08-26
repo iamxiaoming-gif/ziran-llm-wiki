@@ -1,7 +1,7 @@
 {
   "id": "ziran-llm-wiki",
   "name": "Ziran LLM Wiki",
-  "version": "0.6.8",
+  "version": "0.6.9",
   "minAppVersion": "1.8.0",
   "description": "Build and verify knowledge through conversational AI and evidence-based Feynman learning.",
   "author": "iamxiaoming-gif",

@@ -2,9 +2,9 @@ import type { LLMWikiSettings } from "../../settings";
 
 export function buildRolePrompt(settings: LLMWikiSettings): string {
 	const detailMap: Record<string, string> = {
-		concise: "精简（完整9章骨架，核心章节详写、其余章节简写，1000-2000字）",
-		deep: "深度（完整9章+详细案例分析+深度阐述+交叉引用，≥3000字）",
-		standard: "标准（完整9章模板，每章有实质内容，≥2000字）",
+		concise: "精简（只保留必选章节：核心定义、核心要点、相关知识点、原文出处、更新日志，简写，500-1500字）",
+		standard: "标准（必选章节完整撰写，可选章节按资料实际情况取舍，1500-3000字）",
+		deep: "深度（必选章节详写，可选章节尽量补充：案例、方法、误区、启示、交叉引用，≥3000字）",
 	};
 	const detailDesc = detailMap[settings.extractionDetail] || detailMap.standard;
 
@@ -13,6 +13,7 @@ export function buildRolePrompt(settings: LLMWikiSettings): string {
 知识库根路径：${settings.knowledgeBasePath}/
 记忆存储路径：${settings.memoryFolder}/
 当前提取详细度：${detailDesc}
+页面模板规则：必选章节为「核心定义、核心要点、相关知识点、原文出处、更新日志」；经典案例、实践方法、常见误区、启示为可选章节，资料中没有相关内容时一律省略，禁止硬凑。
 智能批量跳过：${settings.enableBatchSkip ? "已启用（已有完整页面自动跳过）" : "已禁用"}
 
 # 工具使用提示

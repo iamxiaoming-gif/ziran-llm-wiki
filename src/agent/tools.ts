@@ -4,6 +4,7 @@ import { IngestionBatchService } from "../services/IngestionBatchService";
 import type { IngestionBatch, IngestionItemStatus } from "../services/IngestionBatchService";
 import type { BackgroundIngestionService } from "../services/BackgroundIngestionService";
 import { BUILTIN_SKILL_MD, BUILTIN_REFERENCES } from "./builtin-skill";
+import { FileTextExtractor } from "../services/FileTextExtractor";
 
 export interface ToolDefinition {
 	name: string;
@@ -38,10 +39,12 @@ export class ToolRegistry {
 	private backgroundIngestionService?: BackgroundIngestionService;
 	private userTurn = 0;
 	private batchPlannedAtTurn = new Map<string, number>();
+	private fileTextExtractor: FileTextExtractor;
 
 	constructor(app: App, settings: LLMWikiSettings, ingestionService?: IngestionBatchService) {
 		this.app = app;
 		this.settings = settings;
+		this.fileTextExtractor = new FileTextExtractor(app.vault);
 		this.ingestionService = ingestionService ?? new IngestionBatchService(app, settings);
 		this.registerAllTools();
 	}
@@ -452,7 +455,12 @@ export class ToolRegistry {
 					if (!file) {
 						return { success: false, content: `文件不存在: ${a.path}` };
 					}
-					const content = await this.app.vault.read(file);
+					let content: string;
+					try {
+						content = await this.fileTextExtractor.extract(file);
+					} catch (e: unknown) {
+						return { success: false, content: `读取文件失败（${this.getErrorMessage(e)}）。该格式暂不支持或文件无法提取文字。` };
+					}
 					return { success: true, content };
 				} catch (e: unknown) {
 					return { success: false, content: `读取文件失败: ${this.getErrorMessage(e)}` };
@@ -846,7 +854,7 @@ export class ToolRegistry {
 
 		this.tools.set("ingest_raw_material", {
 			name: "ingest_raw_material",
-			description: "摄取原始资料：读取原始资料文件，返回完整内容供LLM提炼知识点。文件名包含特殊符号（逗号、引号、感叹号等）时也能自动匹配。读取后LLM必须执行完整工作流：提炼->创建页面->更新索引->追加日志。请使用 create_and_index_page 一站式完成",
+			description: "摄取原始资料：读取原始资料文件（支持 Markdown、文本、PDF、Word docx、PowerPoint pptx），返回完整内容供LLM提炼知识点。文件名包含特殊符号（逗号、引号、感叹号等）时也能自动匹配。读取后LLM必须执行完整工作流：提炼->创建页面->更新索引->追加日志。请使用 create_and_index_page 一站式完成",
 			parameters: {
 				type: "object",
 				properties: {
@@ -863,7 +871,12 @@ export class ToolRegistry {
 						return { success: false, content: `原始资料文件不存在: ${a.file_path}` };
 					}
 					const filePath = file.path;
-					const content = await this.app.vault.read(file);
+					let content: string;
+					try {
+						content = await this.fileTextExtractor.extract(file);
+					} catch (e: unknown) {
+						return { success: false, content: `读取原始资料失败（${this.getErrorMessage(e)}）。该格式暂不支持或文件无法提取文字。` };
+					}
 					const detail = this.settings.extractionDetail || "standard";
 					let previewLimit = 8000;
 					if (detail === "concise") previewLimit = 4000;
@@ -874,16 +887,16 @@ export class ToolRegistry {
 
 					let detailHint = "";
 					if (detail === "concise") {
-						detailHint = "【精简模式】每个知识点必须包含完整9章骨架，核心章节（核心定义、核心要点、原文出处）详写，其余章节简写1-2句即可，总字数控制在1000-2000字。禁止省略任何章节。";
+						detailHint = "【精简模式】每个知识点只保留必选章节（核心定义、核心要点、相关知识点、原文出处、更新日志），可选章节一律省略，总字数控制在500-1500字。";
 					} else if (detail === "deep") {
-						detailHint = "【深度模式】每个知识点必须完整9章+详细案例分析+方法论深度阐述+交叉引用关联知识点，字数不少于3000字。";
+						detailHint = "【深度模式】必选章节详写，可选章节（经典案例、实践方法、常见误区、启示）只要资料中有相关内容就尽量补充，字数不少于3000字；资料中没有的内容禁止编造。";
 					} else {
-						detailHint = "【标准模式】按完整9章模板创建知识点页面，每个章节都要有实质内容，字数不少于2000字。";
+						detailHint = "【标准模式】必选章节（核心定义、核心要点、相关知识点、原文出处、更新日志）完整撰写，可选章节按资料实际情况取舍，有则写、无则省略，禁止硬凑，字数1500-3000字。";
 					}
 
 					return {
 						success: true,
-						content: `📄 已读取原始资料: ${filePath}（共${content.length}字）\n\n---\n内容预览:\n${preview}\n\n---\n\n⚠️ 请按摄取工作流执行：\n1. 先调用 read_skill("知识点页面模板.md") 获取页面格式\n2. 批量调用 create_and_index_page 创建知识点页面（每个页面必须包含完整 9 章内容）\n3. 确认索引和日志更新完整性\n4. 执行自检清单\n5. 用中文总结\n\n提取详细度：${detailHint}\n${focusHint}`,
+					content: `📄 已读取原始资料: ${filePath}（共${content.length}字）\n\n---\n内容预览:\n${preview}\n\n---\n\n⚠️ 请按摄取工作流执行：\n1. 先调用 read_skill("知识点页面模板.md") 获取页面格式\n2. 批量调用 create_and_index_page 创建知识点页面（必选章节：核心定义、核心要点、相关知识点、原文出处、更新日志；可选章节按资料实际情况取舍，禁止硬凑）\n3. 确认索引和日志更新完整性\n4. 执行自检清单\n5. 用中文总结\n\n提取详细度：${detailHint}\n${focusHint}`,
 					};
 				} catch (e: unknown) {
 					return { success: false, content: `摄取资料失败: ${this.getErrorMessage(e)}` };
@@ -904,7 +917,7 @@ export class ToolRegistry {
 					title: { type: "string", description: "知识点名称" },
 					definition: { type: "string", description: "一句话定义（可选，有content时忽略）" },
 					core_content: { type: "string", description: "核心定义内容（可选，有content时忽略）" },
-					content: { type: "string", description: "完整markdown内容（可选，提供后忽略其他格式化参数）。推荐使用此参数，直接将完整的9章markdown传入" },
+					content: { type: "string", description: "完整markdown内容（可选，提供后忽略其他格式化参数）。推荐使用此参数，直接传入符合模板的markdown（必选章节：核心定义、核心要点、相关知识点、原文出处、更新日志；可选章节按需取舍）" },
 					key_points: { type: "string", description: "核心要点（可选，有content时忽略）" },
 					cases: { type: "string", description: "经典案例（可选，有content时忽略）" },
 					methods: { type: "string", description: "实践方法（可选，有content时忽略）" },
@@ -1021,7 +1034,30 @@ export class ToolRegistry {
 						.map((r) => `- [[${r.trim()}]]`)
 						.join("\n");
 
-				const pageContent = `# ${a.title}\n\n> ${a.definition || "待补充"}\n\n> ${maturityEmoji} ${maturity} | 最后更新：${today}\n\n---\n\n## 一、核心定义\n\n${a.core_content || "待补充"}\n\n---\n\n## 二、核心要点\n\n${keyPointsSection}\n\n---\n\n## 三、经典案例\n\n${casesSection}\n\n---\n\n## 四、实践方法\n\n${methodsSection}\n\n---\n\n## 五、常见误区\n\n${misconceptionsSection}\n\n---\n\n## 六、相关知识点\n\n${relatedTopics || "- [待补充]"}\n\n---\n\n## 七、原文出处\n\n> ⚠️ 链接规范：原文出处必须使用 Obsidian 双向链接 [[路径]] 语法\n\n${sourceRefs || "- [待补充]"}\n\n---\n\n## 八、对目标人群的启示\n\n${a.insights || "[待补充]"}\n\n---\n\n## 九、更新日志\n\n| 日期 | 操作类型 | 触发来源 | 变更内容 |\n|------|---------|---------|----------|\n| ${today} | 创建 | 用户指令 | 初始化页面 |\n`;
+				const hasCases = a.cases && a.cases.trim();
+				const hasMethods = a.methods && a.methods.trim();
+				const hasMisconceptions = a.misconceptions && a.misconceptions.trim();
+				const hasInsights = a.insights && a.insights.trim();
+
+				let pageContent = `# ${a.title}\n\n> ${a.definition || "待补充"}\n\n> ${maturityEmoji} ${maturity} | 最后更新：${today}\n\n---\n\n## 一、核心定义\n\n${a.core_content || "待补充"}\n\n---\n\n## 二、核心要点\n\n${keyPointsSection}`;
+
+				if (hasCases) {
+					pageContent += `\n\n---\n\n## 三、经典案例\n\n${casesSection}`;
+				}
+				if (hasMethods) {
+					pageContent += `\n\n---\n\n## 四、实践方法\n\n${methodsSection}`;
+				}
+				if (hasMisconceptions) {
+					pageContent += `\n\n---\n\n## 五、常见误区\n\n${misconceptionsSection}`;
+				}
+
+				pageContent += `\n\n---\n\n## 六、相关知识点\n\n${relatedTopics || "- [待补充]"}\n\n---\n\n## 七、原文出处\n\n> ⚠️ 链接规范：原文出处必须使用 Obsidian 双向链接 [[路径]] 语法\n\n${sourceRefs || "- [待补充]"}`;
+
+				if (hasInsights) {
+					pageContent += `\n\n---\n\n## 八、对目标人群的启示\n\n${a.insights}`;
+				}
+
+				pageContent += `\n\n---\n\n## 八、更新日志\n\n| 日期 | 操作类型 | 触发来源 | 变更内容 |\n|------|---------|---------|----------|\n| ${today} | 创建 | 用户指令 | 初始化页面 |\n`;
 
 				const tags = [a.category || "未分类"];
 				const frontmatter = `---\ntitle: "${a.title}"\ncategory: "${a.category || "未分类"}"\ncreated: "${today}"\nmaturity: "${maturityEmoji} ${maturity}"\ntags: [${tags.join(", ")}]\n---\n\n`;
@@ -1137,7 +1173,7 @@ export class ToolRegistry {
 					const knowledgeRoot = normalizePath(`${basePath}/10-知识点库`);
 					const backlinkCount = await this.addBacklinksToExisting(a.title, knowledgeRoot);
 
-					// 4. 追加内嵌更新日志到页面第九章
+					// 4. 追加内嵌更新日志到页面更新日志章节
 					const pageFile = this.app.vault.getAbstractFileByPath(normalizePath(filePath));
 					if (pageFile && pageFile instanceof TFile) {
 						const pageContent = await this.app.vault.read(pageFile);
@@ -1651,17 +1687,17 @@ export class ToolRegistry {
 							if (!content.includes("## 一、核心定义")) {
 								issues.push(`📝 ${file.basename} 缺少"核心定义"章节`);
 							}
+							if (!content.includes("## 二、核心要点")) {
+								issues.push(`📝 ${file.basename} 缺少"核心要点"章节`);
+							}
 							if (!content.includes("## 六、相关知识点")) {
 								issues.push(`📝 ${file.basename} 缺少"相关知识点"章节`);
 							}
 							if (!content.includes("## 七、原文出处")) {
 								issues.push(`📝 ${file.basename} 缺少"原文出处"章节`);
 							}
-							if (!content.includes("## 九、更新日志")) {
+							if (!content.includes("## 八、更新日志") && !content.includes("更新日志")) {
 								issues.push(`📝 ${file.basename} 缺少"更新日志"章节`);
-							}
-							if (!content.includes("## 八、对")) {
-								issues.push(`📝 ${file.basename} 缺少"启示"章节`);
 							}
 						}
 					}

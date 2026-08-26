@@ -218,6 +218,8 @@ export class LLMWikiSettingTab extends PluginSettingTab {
 	debouncedSave: () => void;
 	private fetchedModels: string[] = [];
 	private providerAdapter = new ProviderAdapter();
+	private savedScrollPos = 0;
+	private savedScrollRatio = 0;
 
 	constructor(app: App, plugin: LLMWikiPlugin) {
 		super(app, plugin);
@@ -252,6 +254,37 @@ export class LLMWikiSettingTab extends PluginSettingTab {
 		this.safeSection(containerEl, "提取与构建", () => {
 			this.buildExtractionSection(containerEl);
 		});
+		this.restoreScrollPos();
+	}
+
+	private captureScrollPos(): void {
+		const scroller = this.scrollContainer();
+		if (!scroller) return;
+		this.savedScrollPos = scroller.scrollTop;
+		this.savedScrollRatio = scroller.scrollHeight > 0 ? scroller.scrollTop / scroller.scrollHeight : 0;
+	}
+
+	private restoreScrollPos(): void {
+		const scroller = this.scrollContainer();
+		if (!scroller) return;
+		requestAnimationFrame(() => {
+			if (this.savedScrollPos > 0) {
+				scroller.scrollTop = this.savedScrollPos;
+			} else if (this.savedScrollRatio > 0) {
+				scroller.scrollTop = Math.round(scroller.scrollHeight * this.savedScrollRatio);
+			}
+		});
+	}
+
+	private scrollContainer(): Element | null {
+		const { containerEl } = this;
+		if (containerEl.scrollHeight > containerEl.clientHeight) return containerEl;
+		let el = containerEl.parentElement;
+		while (el) {
+			if (el.scrollHeight > el.clientHeight) return el;
+			el = el.parentElement;
+		}
+		return containerEl;
 	}
 
 	private safeSection(containerEl: HTMLElement, name: string, fn: () => void) {
@@ -290,6 +323,7 @@ export class LLMWikiSettingTab extends PluginSettingTab {
 					}
 					this.fetchedModels = [];
 					await this.plugin.saveSettings();
+					this.captureScrollPos();
 					this.display();
 				});
 			});
@@ -353,6 +387,7 @@ export class LLMWikiSettingTab extends PluginSettingTab {
 								this.plugin.settings.modelName = models[0];
 							}
 							await this.plugin.saveSettings();
+							this.captureScrollPos();
 							this.display();
 						}
 						btn.setButtonText("获取");
@@ -382,6 +417,7 @@ export class LLMWikiSettingTab extends PluginSettingTab {
 					dropdown.onChange(async (value) => {
 						this.plugin.settings.modelName = value;
 						await this.plugin.saveSettings();
+						this.captureScrollPos();
 						this.display();
 					});
 				});
@@ -401,6 +437,7 @@ export class LLMWikiSettingTab extends PluginSettingTab {
 								this.plugin.settings.modelName = trimmed || CUSTOM_MODEL_SENTINEL;
 								if (trimmed) {
 									await this.plugin.saveSettings();
+									this.captureScrollPos();
 									this.display();
 								}
 							})
@@ -420,6 +457,7 @@ export class LLMWikiSettingTab extends PluginSettingTab {
 						if (models.length > 0) {
 							this.plugin.settings.modelName = models[0];
 							await this.plugin.saveSettings();
+							this.captureScrollPos();
 							this.display();
 						} else {
 							new Notice("未获取到模型列表，请检查 API Key 或该接口不支持 /models。你可以选择「自定义模型名称」手动输入。", 6000);
@@ -518,6 +556,7 @@ export class LLMWikiSettingTab extends PluginSettingTab {
 				.onChange(async (value) => {
 					config.provider = value as TranscriptionProvider;
 					await this.plugin.saveSettings();
+					this.captureScrollPos();
 					this.display();
 				}));
 
@@ -653,7 +692,7 @@ export class LLMWikiSettingTab extends PluginSettingTab {
 						this.plugin.settings.theme = value;
 						await this.plugin.saveSettings();
 						this.plugin.applyTheme();
-						this.display();
+						this.updateThemePreviewActive();
 					})
 			);
 
@@ -728,10 +767,25 @@ export class LLMWikiSettingTab extends PluginSettingTab {
 				void (async () => {
 					this.plugin.settings.theme = theme;
 					await this.plugin.saveSettings();
-					this.display();
+					this.plugin.applyTheme();
+					this.updateThemePreviewActive();
 				})();
 			});
 		}
+	}
+
+	private updateThemePreviewActive(): void {
+		const grid = this.containerEl.querySelector(".llm-wiki-theme-preview-grid");
+		if (!grid) return;
+		const cards = grid.querySelectorAll(".llm-wiki-theme-preview-card");
+		cards.forEach((card) => {
+			const cls = card.classList;
+			if (cls.contains(`llm-wiki-theme-preview-${this.plugin.settings.theme}`)) {
+				cls.add("is-active");
+			} else {
+				cls.remove("is-active");
+			}
+		});
 	}
 
 	private buildExtractionSection(containerEl: HTMLElement) {
@@ -743,9 +797,9 @@ export class LLMWikiSettingTab extends PluginSettingTab {
 			.addDropdown((dropdown) =>
 				dropdown
 					.addOptions({
-						concise: "精简（1000-2000字，9章骨架+核心详写）",
-						standard: "标准（≥2000字，9章每章有实质内容）",
-						deep: "深度（≥3000字，9章+详细案例+交叉引用）",
+						concise: "精简（500-1500字，仅必选章节）",
+						standard: "标准（1500-3000字，必选+按需可选章节）",
+						deep: "深度（≥3000字，必选详写+尽量补充可选章节）",
 					})
 					.setValue(this.plugin.settings.extractionDetail)
 					.onChange(async (value) => {
