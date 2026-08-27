@@ -896,7 +896,7 @@ export class ToolRegistry {
 
 					return {
 						success: true,
-					content: `📄 已读取原始资料: ${filePath}（共${content.length}字）\n\n---\n内容预览:\n${preview}\n\n---\n\n⚠️ 请按摄取工作流执行：\n1. 先调用 read_skill("知识点页面模板.md") 获取页面格式\n2. 批量调用 create_and_index_page 创建知识点页面（必选章节：核心定义、核心要点、相关知识点、原文出处、更新日志；可选章节按资料实际情况取舍，禁止硬凑）\n3. 确认索引和日志更新完整性\n4. 执行自检清单\n5. 用中文总结\n\n提取详细度：${detailHint}\n${focusHint}`,
+					content: `📄 已读取原始资料: ${filePath}（共${content.length}字）\n\n---\n内容预览:\n${preview}\n\n---\n\n⚠️ 请按摄取工作流执行：\n1. 先调用 read_skill("知识点页面模板.md") 获取页面格式\n2. 批量调用 create_and_index_page 创建知识点页面（必选章节：核心定义、核心要点、相关知识点、原文出处、更新日志；可选章节按资料实际情况取舍，禁止硬凑）\n3. 确认索引和日志更新完整性\n4. 执行自检清单\n5. 用中文总结\n\n提取详细度：${detailHint}\n${focusHint}\n\n⛔ 死链规则：相关知识点只能链接已经存在的页面（先用 search_vault_files 确认目标存在），未创建的知识点不得引用；如果创建被拒绝并提示死链，请移除相应链接或先创建目标页面后重试。`,
 					};
 				} catch (e: unknown) {
 					return { success: false, content: `摄取资料失败: ${this.getErrorMessage(e)}` };
@@ -952,6 +952,10 @@ export class ToolRegistry {
 					const maturityEmoji = maturity.includes("完整") ? "🟢" : maturity.includes("框架") ? "🔴" : "🟡";
 					const tags = [a.category || "未分类"];
 					const frontmatter = `---\ntitle: "${a.title}"\ncategory: "${a.category || "未分类"}"\ncreated: "${today}"\nmaturity: "${maturityEmoji} ${maturity}"\ntags: [${tags.join(", ")}]\n---\n\n`;
+					const deadLinks = this.findDeadLinks(a.content || "", [a.title]);
+					if (deadLinks.length > 0) {
+						return { success: false, content: this.deadLinkMessage(deadLinks, "创建知识点页面失败") };
+					}
 					await this.createFileOnly(filePath, frontmatter + a.content);
 					return {
 						success: true,
@@ -1062,6 +1066,10 @@ export class ToolRegistry {
 				const tags = [a.category || "未分类"];
 				const frontmatter = `---\ntitle: "${a.title}"\ncategory: "${a.category || "未分类"}"\ncreated: "${today}"\nmaturity: "${maturityEmoji} ${maturity}"\ntags: [${tags.join(", ")}]\n---\n\n`;
 
+				const deadLinks = this.findDeadLinks(pageContent, [a.title]);
+				if (deadLinks.length > 0) {
+					return { success: false, content: this.deadLinkMessage(deadLinks, "创建知识点页面失败") };
+				}
 				await this.createFileOnly(filePath, frontmatter + pageContent);
 
 					return {
@@ -1129,6 +1137,11 @@ export class ToolRegistry {
 					const tags = (a.tags || "").split(",").filter((t: string) => t.trim()).map((t: string) => t.trim());
 					const tagList = tags.length > 0 ? tags.slice(0, 5) : [category];
 					const frontmatter = `---\ntitle: "${a.title}"\ncategory: "${category}"\ncreated: "${today}"\nmaturity: "${maturityEmoji} ${maturityLevel}"\ntags: [${tagList.join(", ")}]\n---\n\n`;
+
+					const deadLinks = this.findDeadLinks(a.content || "", [a.title]);
+					if (deadLinks.length > 0) {
+						return { success: false, content: this.deadLinkMessage(deadLinks, "一站式创建失败") };
+					}
 
 					await this.createFileOnly(filePath, frontmatter + a.content);
 
@@ -1303,6 +1316,10 @@ export class ToolRegistry {
 					if (existingPerson && existingPerson instanceof TFile) {
 						return { success: false, content: `人物传记页面已存在，禁止覆盖：${filePath}。请使用 update_knowledge_page 追加内容。` };
 					}
+				const deadLinks = this.findDeadLinks(pageContent, [a.name]);
+				if (deadLinks.length > 0) {
+					return { success: false, content: this.deadLinkMessage(deadLinks, "创建人物传记页面失败") };
+				}
 				await this.createFileOnly(filePath, frontmatter + pageContent);
 
 				return {
@@ -1392,6 +1409,10 @@ export class ToolRegistry {
 					const existingOrg = this.app.vault.getAbstractFileByPath(normalizePath(filePath));
 					if (existingOrg && existingOrg instanceof TFile) {
 						return { success: false, content: `组织档案页面已存在，禁止覆盖：${filePath}。请使用 update_knowledge_page 追加内容。` };
+					}
+					const deadLinks = this.findDeadLinks(pageContent, [a.name]);
+					if (deadLinks.length > 0) {
+						return { success: false, content: this.deadLinkMessage(deadLinks, "创建组织档案页面失败") };
 					}
 					await this.createFileOnly(filePath, frontmatter + pageContent);
 
@@ -1501,6 +1522,10 @@ export class ToolRegistry {
 						}
 					}
 
+					const deadLinks = this.findDeadLinks(a.content || "");
+					if (deadLinks.length > 0) {
+						return { success: false, content: this.deadLinkMessage(deadLinks, "更新知识点页面失败") };
+					}
 					await this.app.vault.modify(file, newContent);
 					return { success: true, content: `章节「${a.section}」已更新: ${normalizedPath}\n\n请执行自检清单并更新集中日志。` };
 				} catch (e: unknown) {
@@ -1706,7 +1731,7 @@ export class ToolRegistry {
 					if (checkType === "full" || checkType === "links") {
 						const orphanPages: string[] = [];
 						const linkedPages = new Set<string>();
-						const deadLinks = new Set<string>();
+						const deadLinkFiles = new Map<string, string[]>();
 
 						for (const file of allFiles) {
 							const content = await this.app.vault.read(file);
@@ -1714,8 +1739,10 @@ export class ToolRegistry {
 							for (const match of linkMatches) {
 								const target = match[1].split("|")[0].split("#")[0].trim();
 								linkedPages.add(target);
-								if (!fileNames.has(target)) {
-									deadLinks.add(target);
+								if (!this.linkTargetExists(target)) {
+									const files = deadLinkFiles.get(target) ?? [];
+									files.push(file.basename);
+									deadLinkFiles.set(target, files);
 								}
 							}
 						}
@@ -1731,9 +1758,10 @@ export class ToolRegistry {
 ${orphanPages.slice(0, 20).map((p) => `  - ${p}`).join("\n")}`);
 						}
 
-						if (deadLinks.size > 0) {
-							issues.push(`💀 发现 ${deadLinks.size} 个死链（链接指向不存在的页面）:
-${[...deadLinks].slice(0, 20).map((l) => `  - [[${l}]]`).join("\n")}`);
+						if (deadLinkFiles.size > 0) {
+							const lines = [...deadLinkFiles.entries()].slice(0, 15)
+								.map(([target, files]) => `  - [[${target}]]（出现在 ${files.slice(0, 5).join("、")}${files.length > 5 ? ` 等 ${files.length} 个页面` : ""}）`);
+							issues.push(`💀 发现 ${deadLinkFiles.size} 个死链（链接指向不存在的文件）:\n${lines.join("\n")}\n\n请用 update_knowledge_page 或手动编辑移除这些链接；新页面创建时已强制禁止死链。`);
 						}
 					}
 
@@ -2199,6 +2227,41 @@ ${issues.length > 0 ? `发现 ${issues.length} 个问题:\n${issues.slice(0, 10)
 		if (byContains.length === 1) return byContains[0];
 
 		return null;
+	}
+
+	/** 判断 wiki 链接目标是否已存在于 vault（支持路径、纯文件名、别名 | 与锚点 #） */
+	private linkTargetExists(rawTarget: string): boolean {
+		const target = rawTarget.split("|")[0].split("#")[0].trim();
+		if (!target) return true;
+		const direct = this.app.vault.getAbstractFileByPath(normalizePath(target));
+		if (direct instanceof TFile) return true;
+		const asMarkdown = normalizePath(target.replace(/\.md$/i, "") + ".md");
+		const md = this.app.vault.getAbstractFileByPath(asMarkdown);
+		if (md instanceof TFile) return true;
+		const lower = target.toLowerCase();
+		return this.app.vault.getFiles().some((f) => f.basename.toLowerCase() === lower);
+	}
+
+	/** 提取内容中的所有 [[链接]]，返回指向不存在文件的目标列表 */
+	private findDeadLinks(content: string, allowTitles: string[] = []): string[] {
+		const dead = new Set<string>();
+		const re = /\[\[([^\]]+)\]\]/g;
+		let m: RegExpExecArray | null;
+		while ((m = re.exec(content)) !== null) {
+			const raw = m[1] ?? "";
+			const target = raw.split("|")[0].split("#")[0].trim();
+			if (!target) continue;
+			if (allowTitles.some((t) => t.trim() === target)) continue;
+			if (this.linkTargetExists(target)) continue;
+			dead.add(target);
+		}
+		return [...dead];
+	}
+
+	private deadLinkMessage(deadLinks: string[], action: string): string {
+		return `${action}：内容包含 ${deadLinks.length} 个死链（[[目标]] 指向不存在的文件）：\n${deadLinks
+			.map((l) => `  - [[${l}]]`)
+			.join("\n")}\n\n规则：只能引用已经存在的页面。请先用 search_vault_files 确认目标是否存在；如果目标知识点尚未创建，请先创建目标页面，或从内容中移除这些链接后重试。`;
 	}
 
 	private async addBacklinksToExisting(title: string, knowledgeRoot: string): Promise<number> {

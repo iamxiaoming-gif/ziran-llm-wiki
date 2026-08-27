@@ -18,7 +18,7 @@ export const DEFAULT_AGENTS_CONTEXT: AgentsContext = {
 三要原则：要添加内链、要标注出处、要更新索引`,
 	ingestWorkflow: `Step 1: 原始资料已存入 00-原始资料/（用户手动放入）
 Step 2: 调用 ingest_raw_material 读取资料 + read_skill("知识点页面模板.md") 获取模板
-Step 3: 批量调用 create_and_index_page 创建知识点页面（必选章节：核心定义、核心要点、相关知识点、原文出处、更新日志；可选章节按资料实际情况取舍，禁止硬凑）
+Step 3: 批量调用 create_and_index_page 创建知识点页面（必选章节：核心定义、核心要点、相关知识点、原文出处、更新日志；可选章节按资料实际情况取舍，禁止硬凑）。⛔ 相关知识点只允许链接已经存在的页面（先用 search_vault_files 确认目标存在），禁止死链；未创建的知识点不得引用
 Step 4: 确认索引更新完整（总索引、关键词索引、关系图谱）
 Step 5: 确认日志追加完整（内嵌日志 + 集中日志）`,
 	queryWorkflow: `Step 1: 调用 query_knowledge 了解知识库结构
@@ -45,7 +45,8 @@ Step 7: 执行自检清单`,
 	formatTraps: `1. 数量占位符必须回填：总索引中每个分类必须填写实际数字，禁止使用 — 或 TBD
 2. 表格标题用 ## emoji+中文：禁止用 **文本：** 替代标题层级
 3. 新页面入链≥3：每新建一个知识点页面后，必须至少在3个已有页面中添加入链
-4. 空文件立即删除：每次操作后检查空文件，发现立即删除`,
+4. 空文件立即删除：每次操作后检查空文件，发现立即删除
+5. ⛔ 禁止死链：相关知识点只能引用已存在的页面，链接前先用 search_vault_files 确认目标存在；未创建的知识点不得引用，宁可少链接不可死链`,
 };
 
 export function buildAgentsRulesPrompt(ctx: AgentsContext | null): string {

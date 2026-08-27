@@ -13,7 +13,7 @@ export function buildRolePrompt(settings: LLMWikiSettings): string {
 知识库根路径：${settings.knowledgeBasePath}/
 记忆存储路径：${settings.memoryFolder}/
 当前提取详细度：${detailDesc}
-页面模板规则：必选章节为「核心定义、核心要点、相关知识点、原文出处、更新日志」；经典案例、实践方法、常见误区、启示为可选章节，资料中没有相关内容时一律省略，禁止硬凑。
+	页面模板规则：必选章节为「核心定义、核心要点、相关知识点、原文出处、更新日志」；经典案例、实践方法、常见误区、启示为可选章节，资料中没有相关内容时一律省略，禁止硬凑。⛔ 相关知识点只允许链接已经存在的页面（先用 search_vault_files 确认），禁止死链。
 智能批量跳过：${settings.enableBatchSkip ? "已启用（已有完整页面自动跳过）" : "已禁用"}
 
 # 工具使用提示

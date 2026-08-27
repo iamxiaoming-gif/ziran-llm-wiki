@@ -7,6 +7,12 @@ declare class DecompressionStream {
 	readonly writable: WritableStream;
 }
 
+interface PdfObject {
+	dict: string;
+	decoded?: Uint8Array | null;
+	toUnicode?: Map<string, string>;
+}
+
 /**
  * 轻量文件文字提取服务：支持 Markdown/文本、PDF、Word(docx)、PowerPoint(pptx)。
  * 不引入外部依赖：docx/pptx 按 ZIP 结构解析 XML；pdf 按对象流扫描提取文本。
@@ -97,13 +103,57 @@ function bytesToString(bytes: Uint8Array): string {
 	return out;
 }
 
+function rawBytes(s: string): Uint8Array {
+	const bytes = new Uint8Array(s.length);
+	for (let i = 0; i < s.length; i++) bytes[i] = s.charCodeAt(i) & 0xff;
+	return bytes;
+}
+
+function hexBytes(hex: string): Uint8Array {
+	const clean = hex.replace(/\s+/g, "");
+	const out = new Uint8Array(Math.floor(clean.length / 2));
+	for (let i = 0; i < out.length; i++) out[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
+	return out;
+}
+
+/** 括号字符串字面量 → 字节（处理 \\n \\r \\t 与八进制转义） */
+function parenToBytes(s: string): Uint8Array {
+	const bytes: number[] = [];
+	for (let i = 0; i < s.length; i++) {
+		const ch = s[i];
+		if (ch === "\\") {
+			const next = s[i + 1];
+			if (next === "n") { bytes.push(10); i++; }
+			else if (next === "r") { bytes.push(13); i++; }
+			else if (next === "t") { bytes.push(9); i++; }
+			else if (next === "b") { bytes.push(8); i++; }
+			else if (next === "f") { bytes.push(12); i++; }
+			else if (next >= "0" && next <= "7") {
+				let oct = "";
+				let j = i + 1;
+				while (j < s.length && oct.length < 3 && s[j] >= "0" && s[j] <= "7") { oct += s[j]; j++; }
+				bytes.push(parseInt(oct, 8) & 0xff);
+				i = j - 1;
+			} else {
+				bytes.push(s.charCodeAt(i + 1) & 0xff);
+				i++;
+			}
+		} else {
+			bytes.push(s.charCodeAt(i) & 0xff);
+		}
+	}
+	return new Uint8Array(bytes);
+}
+
 async function inflate(bytes: Uint8Array): Promise<Uint8Array | null> {
-	// 兼容两种实现：Chromium/Electron 的 'deflate' 指 raw deflate；Node 的指 zlib 包装
-	try {
+	const tryInflate = async (b: Uint8Array): Promise<Uint8Array> => {
 		const ds = new DecompressionStream("deflate");
-		const stream = new Blob([bytes]).stream().pipeThrough(ds);
+		const stream = new Blob([b]).stream().pipeThrough(ds);
 		const buf = await new Response(stream).arrayBuffer();
 		return new Uint8Array(buf);
+	};
+	try {
+		return await tryInflate(bytes);
 	} catch {
 		try {
 			// 部分实现（如 Node）需要完整 zlib 包装：补 2 字节头 + 4 字节 Adler-32 校验
@@ -116,10 +166,7 @@ async function inflate(bytes: Uint8Array): Promise<Uint8Array | null> {
 			withHeader[bytes.length + 3] = (adler >>> 16) & 0xff;
 			withHeader[bytes.length + 4] = (adler >>> 8) & 0xff;
 			withHeader[bytes.length + 5] = adler & 0xff;
-			const ds2 = new DecompressionStream("deflate");
-			const stream2 = new Blob([withHeader]).stream().pipeThrough(ds2);
-			const buf2 = await new Response(stream2).arrayBuffer();
-			return new Uint8Array(buf2);
+			return await tryInflate(withHeader);
 		} catch {
 			return null;
 		}
@@ -134,6 +181,439 @@ function adler32(data: Uint8Array): number {
 		b = (b + a) % 65521;
 	}
 	return ((b << 16) | a) >>> 0;
+}
+
+function isZlibHeader(b: Uint8Array): boolean {
+	if (b.length < 2) return false;
+	const cmf = b[0];
+	const flg = b[1];
+	return (cmf & 0x0f) === 8 && (((cmf << 8) | flg) % 31 === 0);
+}
+
+/** 智能解压：兼容 raw deflate / zlib 包装，并容忍 endstream 前的换行符 */
+async function inflateSmart(bytes: Uint8Array): Promise<Uint8Array | null> {
+	const stripEol = (b: Uint8Array): Uint8Array => {
+		let n = b.length;
+		while (n > 0 && (b[n - 1] === 10 || b[n - 1] === 13)) n--;
+		return b.slice(0, n);
+	};
+	const variants: Uint8Array[] = [bytes, stripEol(bytes)];
+	for (const v of variants) {
+		if (isZlibHeader(v)) variants.push(v.slice(2));
+	}
+	for (const v of variants) {
+		const r = await inflate(v);
+		if (r) return r;
+	}
+	return null;
+}
+
+function asciiHexDecode(bytes: Uint8Array): Uint8Array {
+	let s = "";
+	for (const b of bytes) {
+		const c = String.fromCharCode(b);
+		if (!/\s/.test(c)) s += c;
+	}
+	if (s.endsWith(">")) s = s.slice(0, -1);
+	if (s.length % 2) s += "0";
+	const out: number[] = [];
+	for (let i = 0; i + 1 < s.length; i += 2) out.push(parseInt(s.slice(i, i + 2), 16));
+	return new Uint8Array(out);
+}
+
+function ascii85Decode(bytes: Uint8Array): Uint8Array {
+	let s = "";
+	for (const b of bytes) {
+		const c = String.fromCharCode(b);
+		if (!/\s/.test(c)) s += c;
+	}
+	if (s.endsWith("~>")) s = s.slice(0, -2);
+	const out: number[] = [];
+	let i = 0;
+	while (i < s.length) {
+		if (s[i] === "z") {
+			out.push(0, 0, 0, 0);
+			i++;
+			continue;
+		}
+		const chunk = s.slice(i, i + 5);
+		const pad = 5 - chunk.length;
+		const full = chunk + "u".repeat(pad);
+		let val = 0;
+		for (const ch of full) val = val * 85 + (ch.charCodeAt(0) - 33);
+		const b4 = [(val >>> 24) & 0xff, (val >>> 16) & 0xff, (val >>> 8) & 0xff, val & 0xff];
+		out.push(...b4.slice(0, 4 - pad));
+		i += chunk.length;
+	}
+	return new Uint8Array(out);
+}
+
+/** 解析流字典中的过滤器列表（支持单个或数组形式） */
+function getFilters(dictText: string): string[] {
+	const m = /\/Filter\s*(\[[^\]]*\]|\/[A-Za-z0-9]+)/.exec(dictText);
+	if (!m) return [];
+	if (m[1].startsWith("[")) return (m[1].match(/\/[A-Za-z0-9]+/g) || []).map((x) => x.slice(1));
+	return [m[1].slice(1)];
+}
+
+async function applyFilters(data: Uint8Array, filters: string[]): Promise<Uint8Array | null> {
+	let cur: Uint8Array | null = data;
+	for (const f of filters) {
+		if (f === "FlateDecode" || f === "Fl") cur = await inflateSmart(cur);
+		else if (f === "ASCIIHexDecode" || f === "AHx") cur = asciiHexDecode(cur);
+		else if (f === "ASCII85Decode" || f === "A85") cur = ascii85Decode(cur);
+		else return null;
+		if (!cur) return null;
+	}
+	return cur;
+}
+
+// ==================== 字典解析 ====================
+
+interface ParsedValue {
+	value: string | null;
+	end: number;
+}
+
+function parseValueAt(text: string, i: number): ParsedValue {
+	while (i < text.length && /\s/.test(text[i])) i++;
+	if (i >= text.length) return { value: null, end: i };
+	const c = text[i];
+	if (c === "(") {
+		let depth = 1;
+		let j = i + 1;
+		let out = "";
+		while (j < text.length && depth > 0) {
+			if (text[j] === "\\") { out += text.slice(j, j + 2); j += 2; continue; }
+			if (text[j] === "(") depth++;
+			else if (text[j] === ")") { depth--; if (depth === 0) break; }
+			out += text[j];
+			j++;
+		}
+		return { value: out, end: j + 1 };
+	}
+	if (c === "<" && text[i + 1] === "<") {
+		let depth = 1;
+		let j = i + 2;
+		let out = "";
+		while (j < text.length && depth > 0) {
+			if (text[j] === "<" && text[j + 1] === "<") { depth++; out += "<"; j += 2; continue; }
+			if (text[j] === ">" && text[j + 1] === ">") { depth--; if (depth === 0) break; out += ">"; j += 2; continue; }
+			out += text[j];
+			j++;
+		}
+		return { value: out, end: j + 2 };
+	}
+	if (c === "[") {
+		let depth = 1;
+		let j = i + 1;
+		let out = "";
+		while (j < text.length && depth > 0) {
+			if (text[j] === "[") depth++;
+			else if (text[j] === "]") { depth--; if (depth === 0) break; }
+			out += text[j];
+			j++;
+		}
+		return { value: out, end: j + 1 };
+	}
+	if (c === "<") {
+		const j = text.indexOf(">", i);
+		return { value: j < 0 ? "" : text.slice(i + 1, j), end: j < 0 ? text.length : j + 1 };
+	}
+	let j = i;
+	while (j < text.length && !/[\s<>\[\]()]/.test(text[j])) j++;
+	let value = text.slice(i, j);
+	// 引用值（如 "7 0 R"）：继续吞掉后面的 "数字 R"
+	if (/^\d+$/.test(value)) {
+		const ref = text.slice(j).match(/^\s+(\d+)\s+R\b/);
+		if (ref) {
+			value += ref[0];
+			j += ref[0].length;
+		}
+	}
+	return { value, end: j };
+}
+
+function getValue(dictText: string, key: string): string | null {
+	const re = new RegExp("/" + key + "\\b");
+	const m = re.exec(dictText);
+	if (!m) return null;
+	return parseValueAt(dictText, m.index + m[0].length).value;
+}
+
+function parseRefs(value: string): number[] {
+	const refs: number[] = [];
+	const re = /(\d+)\s+(\d+)\s+R/g;
+	let m: RegExpExecArray | null;
+	while ((m = re.exec(value)) !== null) refs.push(parseInt(m[1], 10));
+	return refs;
+}
+
+function parseFontPairs(resourcesFontValue: string): Record<string, number> {
+	const out: Record<string, number> = {};
+	const re = /\/([A-Za-z0-9]+)\s+(\d+)\s+(\d+)\s+R/g;
+	let m: RegExpExecArray | null;
+	while ((m = re.exec(resourcesFontValue)) !== null) out[m[1]] = parseInt(m[2], 10);
+	return out;
+}
+
+// ==================== ToUnicode / CMap ====================
+
+/** 判断字节串更像 UTF-16BE（中文 CID 字体常见）还是 Latin-1 */
+function looksUtf16be(bytes: Uint8Array): boolean {
+	if (bytes.length < 4 || bytes.length % 2 !== 0) return false;
+	let score = 0;
+	let hasHigh = false;
+	for (let i = 0; i + 1 < bytes.length; i += 2) {
+		const hi = bytes[i];
+		const lo = bytes[i + 1];
+		if (hi >= 0x80 && hi <= 0xff) { score += 3; hasHigh = true; }
+		else if (hi === 0 && lo >= 0x20 && lo <= 0x7e) score += 4;
+		else if (hi >= 0x4e && hi <= 0x7f && (lo >= 0x80 || lo < 0x20)) score += 2;
+		else if (hi >= 0x20 && hi <= 0x7e && lo >= 0x20 && lo <= 0x7e) score -= 2;
+	}
+	if (score >= 2) return true;
+	return hasHigh && score >= 1;
+}
+
+function decodeUtf16be(bytes: Uint8Array): string {
+	let out = "";
+	for (let i = 0; i + 1 < bytes.length; i += 2) {
+		const code = (bytes[i] << 8) | bytes[i + 1];
+		if (code >= 0xd800 && code <= 0xdbff && i + 3 < bytes.length) {
+			const lo = (bytes[i + 2] << 8) | bytes[i + 3];
+			if (lo >= 0xdc00 && lo <= 0xdfff) {
+				out += String.fromCharCode(code, lo);
+				i += 2;
+				continue;
+			}
+		}
+		out += String.fromCharCode(code);
+	}
+	return out;
+}
+
+function hexToUnicode(hex: string): string {
+	const bytes = hexBytes(hex);
+	// CMap 目标值按规范是 UTF-16BE（1 字节值按 Latin-1 处理）
+	if (bytes.length === 1) return String.fromCharCode(bytes[0]);
+	if (bytes.length >= 2 && bytes.length % 2 === 0) return decodeUtf16be(bytes);
+	let out = "";
+	for (const b of bytes) out += String.fromCharCode(b);
+	return out;
+}
+
+/** 解析 ToUnicode CMap（beginbfchar / beginbfrange） */
+function parseToUnicode(decoded: Uint8Array): Map<string, string> {
+	const s = new TextDecoder().decode(decoded);
+	const map = new Map<string, string>();
+	let m: RegExpExecArray | null;
+	const charRe = /beginbfchar([\s\S]*?)endbfchar/g;
+	while ((m = charRe.exec(s)) !== null) {
+		const pairs = m[1].match(/<([0-9a-fA-F]+)>\s*<([0-9a-fA-F]+)>/g) || [];
+		for (const p of pairs) {
+			const mm = /<([0-9a-fA-F]+)>\s*<([0-9a-fA-F]+)>/.exec(p);
+			if (mm) map.set(mm[1].toLowerCase(), hexToUnicode(mm[2]));
+		}
+	}
+	const rangeRe = /beginbfrange([\s\S]*?)endbfrange/g;
+	while ((m = rangeRe.exec(s)) !== null) {
+		const arrRanges = m[1].match(/<([0-9a-fA-F]+)>\s*<([0-9a-fA-F]+)>\s*\[([\s\S]*?)\]/g) || [];
+		for (const r of arrRanges) {
+			const mm = /<([0-9a-fA-F]+)>\s*<([0-9a-fA-F]+)>\s*\[([\s\S]*?)\]/.exec(r);
+			if (!mm) continue;
+			const start = parseInt(mm[1], 16);
+			const end = parseInt(mm[2], 16);
+			const dests = mm[3].match(/<([0-9a-fA-F]+)>/g) || [];
+			for (let code = start, k = 0; code <= end && k < dests.length; code++, k++) {
+				const dm = /<([0-9a-fA-F]+)>/.exec(dests[k]);
+				if (dm) map.set(code.toString(16), hexToUnicode(dm[1]));
+			}
+		}
+		const ranges = m[1].match(/<([0-9a-fA-F]+)>\s*<([0-9a-fA-F]+)>\s*<([0-9a-fA-F]+)>/g) || [];
+		for (const r of ranges) {
+			const mm = /<([0-9a-fA-F]+)>\s*<([0-9a-fA-F]+)>\s*<([0-9a-fA-F]+)>/.exec(r);
+			if (!mm) continue;
+			const start = parseInt(mm[1], 16);
+			const end = parseInt(mm[2], 16);
+			const base = parseInt(mm[3], 16);
+			for (let code = start; code <= end; code++) {
+				map.set(code.toString(16), String.fromCodePoint(base + (code - start)));
+			}
+		}
+	}
+	return map;
+}
+
+// ==================== 文本操作符提取 ====================
+
+function decodeString(bytes: Uint8Array, fontObj: PdfObject | null): string {
+	if (!bytes.length) return "";
+	if (fontObj && fontObj.toUnicode) {
+		const multi = /\/Subtype\s*\/Type0/.test(fontObj.dict);
+		const step = multi ? 2 : 1;
+		let out = "";
+		let matched = 0;
+		let total = 0;
+		for (let i = 0; i + step <= bytes.length; i += step) {
+			total++;
+			let key = "";
+			for (let k = 0; k < step; k++) key += bytes[i + k].toString(16).padStart(2, "0");
+			const v = fontObj.toUnicode.get(key);
+			if (v !== undefined && v !== "\uFFFD") {
+				out += v;
+				matched++;
+			}
+		}
+		if (matched >= Math.ceil(total / 2)) return out;
+	}
+	if (looksUtf16be(bytes)) return decodeUtf16be(bytes);
+	let out = "";
+	for (const b of bytes) out += String.fromCharCode(b);
+	return out;
+}
+
+/** 从内容流中提取文本：跟踪当前字体（Tf）与文本定位（Td/Tm/T*） */
+function extractContentText(decoded: Uint8Array, fonts: Record<string, number>, objects: Map<number, PdfObject>): string {
+	const s = new TextDecoder().decode(decoded);
+	let fontNum: number | null = null;
+	const out: string[] = [];
+	let pendingSep = "";
+	let i = 0;
+	while (i < s.length) {
+		const c = s[i];
+		if (c === "(") {
+			const parsed = parseValueAt(s, i);
+			const rest = s.slice(parsed.end).match(/^\s*Tj\b/);
+			if (rest) {
+				if (pendingSep && out.length) out.push(pendingSep);
+				pendingSep = "";
+				out.push(decodeString(parenToBytes(parsed.value ?? ""), fontNum ? objects.get(fontNum) ?? null : null));
+				i = parsed.end + rest[0].length;
+			} else {
+				i = parsed.end;
+			}
+			continue;
+		}
+		if (c === "<" && s[i + 1] !== "<") {
+			const parsed = parseValueAt(s, i);
+			const rest = s.slice(parsed.end).match(/^\s*Tj\b/);
+			if (rest) {
+				if (pendingSep && out.length) out.push(pendingSep);
+				pendingSep = "";
+				out.push(decodeString(hexBytes(parsed.value ?? ""), fontNum ? objects.get(fontNum) ?? null : null));
+				i = parsed.end + rest[0].length;
+			} else {
+				i = parsed.end;
+			}
+			continue;
+		}
+		if (c === "[") {
+			const parsed = parseValueAt(s, i);
+			const rest = s.slice(parsed.end).match(/^\s*TJ\b/);
+			if (rest) {
+				if (pendingSep && out.length) out.push(pendingSep);
+				pendingSep = "";
+				const arrRe = /\(((?:\\.|[^()\\])*)\)|<([0-9a-fA-F\s]+)>/g;
+				let am: RegExpExecArray | null;
+				while ((am = arrRe.exec(parsed.value ?? "")) !== null) {
+					const bytes = am[1] !== undefined ? parenToBytes(am[1]) : hexBytes(am[2] ?? "");
+					out.push(decodeString(bytes, fontNum ? objects.get(fontNum) ?? null : null));
+				}
+				i = parsed.end + rest[0].length;
+			} else {
+				i = parsed.end;
+			}
+			continue;
+		}
+		const td = s.slice(i).match(/^([\d.-]+)\s+([\d.-]+)\s+Td\b/);
+		if (td) {
+			pendingSep = parseFloat(td[2]) !== 0 ? "\n" : " ";
+			i += td[0].length;
+			continue;
+		}
+		const tm = s.slice(i).match(/^[\d.-]+(\s+[\d.-]+)*\s*Tm\b/);
+		if (tm) {
+			pendingSep = "\n";
+			i += tm[0].length;
+			continue;
+		}
+		const tstar = s.slice(i).match(/^T\*\b/);
+		if (tstar) {
+			pendingSep = "\n";
+			i += tstar[0].length;
+			continue;
+		}
+		if (c === "/") {
+			const nm = s.slice(i).match(/^\/([A-Za-z0-9+\-]+)\s+[\d.]+(\s+[\d.]+)*\s*Tf/);
+			if (nm) {
+				fontNum = fonts[nm[1]] ?? null;
+				i += nm[0].length;
+				continue;
+			}
+		}
+		i++;
+	}
+	return out.join("").trim();
+}
+
+/** PDF 文本提取：解析对象与流，支持 Flate/ASCII85/ASCIIHex 过滤器链、Tj/TJ、ToUnicode 映射与中文 UTF-16BE */
+async function extractPdfText(data: Uint8Array): Promise<string> {
+	const src = bytesToString(data);
+	const objects = new Map<number, PdfObject>();
+	const objRe = /(\d+)\s+(\d+)\s+obj([\s\S]*?)endobj/g;
+	let m: RegExpExecArray | null;
+	while ((m = objRe.exec(src)) !== null) {
+		const num = parseInt(m[1], 10);
+		const body = m[3];
+		const si = body.search(/stream[\r\n]/);
+		if (si >= 0) {
+			const dict = body.slice(0, si);
+			const rm = /stream[\r\n]+([\s\S]*?)[\r\n]*endstream/.exec(body);
+			const raw = rm ? rawBytes(rm[1]) : new Uint8Array(0);
+			const decoded = await applyFilters(raw, getFilters(dict));
+			objects.set(num, { dict, decoded });
+		} else {
+			objects.set(num, { dict: body });
+		}
+	}
+
+	// 解析各字体的 ToUnicode 映射
+	for (const obj of objects.values()) {
+		if (/\/ToUnicode/.test(obj.dict)) {
+			const refs = parseRefs(getValue(obj.dict, "ToUnicode") || "");
+			const tuObj = refs.length ? objects.get(refs[0]) : null;
+			if (tuObj && tuObj.decoded) obj.toUnicode = parseToUnicode(tuObj.decoded);
+		}
+	}
+
+	// 页面 → 字体映射
+	const pages: PdfObject[] = [];
+	for (const obj of objects.values()) {
+		if (/\/Type\s*\/Page\b/.test(obj.dict) && !/\/Type\s*\/Pages\b/.test(obj.dict)) pages.push(obj);
+	}
+
+	const results: string[] = [];
+	for (const page of pages) {
+		const resources = getValue(page.dict, "Resources");
+		const fonts = resources ? parseFontPairs(getValue(resources, "Font") || "") : {};
+		const contents = parseRefs(getValue(page.dict, "Contents") || "");
+		for (const ref of contents) {
+			const obj = objects.get(ref);
+			if (obj && obj.decoded) results.push(extractContentText(obj.decoded, fonts, objects));
+		}
+	}
+
+	// 兜底：扫描所有看起来像内容流的对象（页面结构解析失败时）
+	if (!results.some((r) => r.trim())) {
+		for (const obj of objects.values()) {
+			if (!obj.decoded) continue;
+			const s = new TextDecoder().decode(obj.decoded);
+			if (/BT\b|Tf\b|Tj\b|TJ\b/.test(s)) results.push(extractContentText(obj.decoded, {}, objects));
+		}
+	}
+
+	return results.filter((r) => r.trim()).join("\n");
 }
 
 /** 极简 ZIP 读取器：只读取本地文件头与数据，支持 deflate 解压 */
@@ -235,57 +715,6 @@ function xmlToPlainText(xml: string): string {
 	} catch {
 		return "";
 	}
-}
-
-/** PDF 文本提取：扫描对象流，解压 FlateDecode，抽取 Tj/TJ 文本操作符 */
-async function extractPdfText(data: Uint8Array): Promise<string> {
-	const src = bytesToString(data);
-	const texts: string[] = [];
-
-	// 找到所有流对象
-	const streamRe = /(\d+)\s+(\d+)\s+obj[\s\S]*?stream\r?\n([\s\S]*?)endstream/g;
-	let m: RegExpExecArray | null;
-	while ((m = streamRe.exec(src)) !== null) {
-		let raw = m[3];
-		// 判断是否 Flate 压缩
-		const objHeader = src.slice(Math.max(0, m.index - 400), m.index);
-		const isFlate = /\/Filter\s*\/FlateDecode/.test(objHeader);
-		let content: string;
-		if (isFlate) {
-			let rawBytesArr = rawBytes(raw);
-			// zlib 流开头有 2 字节头（78 9C/78 DA 等），DecompressionStream 需要 raw deflate
-			if (rawBytesArr.length > 2 && rawBytesArr[0] === 0x78) {
-				rawBytesArr = rawBytesArr.slice(2);
-			}
-			const inflated = await inflate(rawBytesArr);
-			if (!inflated) continue;
-			content = utf8Decode(inflated);
-		} else {
-			content = raw;
-		}
-		texts.push(extractPdfTextOps(content));
-	}
-
-	return texts.filter((t) => t.trim()).join("\n");
-}
-
-function rawBytes(s: string): Uint8Array {
-	const bytes = new Uint8Array(s.length);
-	for (let i = 0; i < s.length; i++) bytes[i] = s.charCodeAt(i) & 0xff;
-	return bytes;
-}
-
-/** 从 PDF 内容流中抽取文本操作符 */
-function extractPdfTextOps(content: string): string {
-	const out: string[] = [];
-	// 括号字符串
-	const stringRe = /\(((?:\\.|[^()\\])*)\)\s*Tj|\[((?:\\.|[^\]\\])*)\]\s*TJ/g;
-	let m: RegExpExecArray | null;
-	while ((m = stringRe.exec(content)) !== null) {
-		const s = (m[1] ?? m[2] ?? "").replace(/\\([()\\])/g, "$1").replace(/\\n/g, " ").replace(/\\r/g, " ").replace(/\\([0-7]{1,3})/g, (_a, oct: string) => String.fromCharCode(parseInt(oct, 8)));
-		if (s.trim()) out.push(s);
-	}
-	return out.join("");
 }
 
 function readU16(d: Uint8Array, o: number): number {
