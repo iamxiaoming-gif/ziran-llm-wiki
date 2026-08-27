@@ -80,6 +80,10 @@ npm install
 npm run build   # outputs main.js
 ```
 
+## 关注我们
+
+欢迎大家关注 **自然成长笔记** 小红书、抖音、微信公众号，可随时交流使用体验！
+
 ## License
 
 MIT © iamxiaoming-gif
